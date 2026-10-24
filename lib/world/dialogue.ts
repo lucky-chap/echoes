@@ -23,19 +23,16 @@ export function composeDialogue(
     return [
       {
         speaker: "mia",
-        text: `Let's try ${winner.name}. It gives us ${decision.winner.collective.toFixed(1)} together, and nobody scores below ${decision.winner.minimum}. A little something for each of us.`,
+        text: `Let's try ${winner.name}. I want to see what catches your eye.`,
       },
     ]
   return residents.map((r) => {
     const proposal = destination(decision.proposals[r.id])
-    const row = decision.recommendations.find(
-      (v) => v.residentId === r.id && v.destinationId === proposal.id
-    )!
     const score = decision.winner.scores[r.id]
     if (phase === "proposing")
       return {
         speaker: r.id,
-        text: `${situation === "sunny" ? "For this afternoon" : situationNames[situation] + ". Now"} I'd pick ${proposal.name}: ${row.score}/100 for me. ${row.reasons.map((reason) => reason.replace(`${r.name}'s`, "my")).join("; ")}. I want to ${r.goal.toLowerCase()}.`,
+        text: `${situation === "sunny" ? "For this afternoon" : situationNames[situation] + ". Now"} I'd pick ${proposal.name}! I want to ${r.goal.toLowerCase()}.`,
       }
     if (phase === "deliberating")
       return {
@@ -43,7 +40,7 @@ export function composeDialogue(
         text:
           proposal.id === winner.id
             ? `${winner.name} is my first choice. ${winner.activity[0].toUpperCase() + winner.activity.slice(1)} would be lovely. How does that feel for everyone?`
-            : `I prefer ${proposal.name} (${row.score}), but ${winner.name} still gives me ${score}. ${score >= 60 ? "I can happily meet you halfway." : "That is a stretch for my tastes, but I will give our shared choice a try."} ${r.id === "kai" ? "Finding something new together counts too." : r.id === "luna" ? "I can look for a quiet little detail there." : "Being together matters to me."}`,
+            : `I prefer ${proposal.name} but I’m curious about ${winner.name}. ${score >= 60 ? "I can happily meet you halfway." : "That is a stretch for my tastes, but I will give our shared choice a try."} ${r.id === "kai" ? "Finding something new together counts too." : r.id === "luna" ? "I can look for a quiet little detail there." : "Being together matters to me."}`,
       }
     return {
       speaker: r.id,

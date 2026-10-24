@@ -1475,3 +1475,20 @@ footer > span:last-child {
     left: clamp(35%, var(--speaker-x, 50%), 65%) !important;
   }
 }
+
+/* Living village additions retain the original town and palette. */
+.memory-panel, .provider-details { padding: 16px; font-size: 12px; line-height: 1.7; color: #667164; }
+.memory-panel summary, .provider-details summary { cursor: pointer; font-weight: 600; color: #425843; }
+.memory-panel ul, .provider-details ul { padding-left: 18px; }
+.provider-details { background: #f7f8f2; border: 1px solid #e3e8dc; border-radius: 14px; overflow-wrap: anywhere; }
+.recent-incident { font-style: italic; }
+.town-quick-controls { flex-wrap: wrap; }
+.town-quick-controls select { max-width: 150px; }
+.speech-bubble strong span { display: inline-block; animation: living-emote 900ms ease-in-out infinite alternate; }
+@keyframes living-emote { to { transform: translateY(-3px) rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) { .speech-bubble strong span { animation: none; } }
+.incident-emote { position: absolute; pointer-events: none; transform: translate(-50%, -180%); font-size: 22px; background: #fff7dd; border-radius: 50%; padding: 4px 8px; color: #617153; }
+.town-quick-controls { display: flex; gap: 12px; padding: 12px; align-items: center; border-top: 1px solid var(--border); }
+.town-quick-controls .start-button { width: auto; flex: 1; margin: 0; }
+.town-quick-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #657957; }
+.town-quick-controls select, .town-quick-controls > button:not(.start-button) { border: 1px solid #dce1cf; border-radius: 5px; padding: 7px; background: #f2f3e9; color: #657957; font-size: 11px; }

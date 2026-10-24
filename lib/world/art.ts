@@ -1,4 +1,9 @@
-import { residents, type Point, type DestinationId } from "./profiles"
+import {
+  residents,
+  type Point,
+  type DestinationId,
+  type ResidentId,
+} from "./profiles"
 export const WIDTH = 480,
   HEIGHT = 320
 type C = CanvasRenderingContext2D
@@ -189,7 +194,7 @@ export function drawTown(
   positions: Point[] = residents.map((r) => r.start),
   walking = false,
   activeSpeaker = -1,
-  activity?: DestinationId
+  activity?: DestinationId | Partial<Record<ResidentId, DestinationId>>
 ) {
   c.imageSmoothingEnabled = false
   rect(c, 0, 0, 480, 320, "#9db77a")
@@ -322,22 +327,24 @@ export function drawTown(
   rect(c, 168, 123, 5, 6, "#f6e7bf")
   rect(c, 176, 124, 4, 4, "#c78e70")
   residents.forEach((r, i) => {
+    const residentActivity =
+      typeof activity === "string" ? activity : activity?.[r.id]
     const [x, y] = positions[i]
     if (selected === i || activeSpeaker === i) {
       ellipse(c, x, y + 3, 9, 3, "#f5e1a0")
     }
     drawResident(c, i, x, y, walking, seconds)
     // Tiny original props make each completed outing visible in the town.
-    if (activity === "cafe") {
+    if (residentActivity === "cafe") {
       rect(c, x + 5, y - 8, 4, 4, "#f5e4b9")
       rect(c, x + 9, y - 7, 2, 2, "#d6bb87")
       rect(c, x + 6, y - 11 - Math.floor(seconds % 2), 1, 2, "#e8dfba")
-    } else if (activity === "museum") {
+    } else if (residentActivity === "museum") {
       rect(c, x + 4, y - 9, 7, 7, "#99764d")
       rect(c, x + 5, y - 8, 5, 5, "#f0e3c0")
       rect(c, x + 6, y - 6, 3, 1, "#8b9b75")
       rect(c, x + 5 + (Math.floor(seconds * 2) % 3), y - 7, 1, 3, "#695947")
-    } else if (activity === "music") {
+    } else if (residentActivity === "music") {
       const lift = Math.floor(seconds * 2 + i) % 4
       rect(c, x + 7, y - 16 - lift, 1, 5, "#5a7255")
       rect(c, x + 5, y - 12 - lift, 2, 2, "#5a7255")

@@ -1,58 +1,62 @@
-# Worldlings
+# Worldlings — Littlehaven
 
-An original pixel-art town built with Next.js App Router, TypeScript, Tailwind CSS, Canvas, React overlays, and native Web Audio. No downloaded artwork, audio assets, API keys, or extra runtime dependencies are needed.
+A living pixel-art village in the existing Next.js app. Mia, Kai, and Luna keep their original sprites, paths, town artwork, procedural soundtrack and individual speaking sounds.
 
-## Run locally
+## Run
 
 ```sh
 npm install
+cp .env.example .env.local # only for a new setup; preserve an existing key
 npm run dev
 ```
 
-Open http://localhost:3000. Production: `npm run build` then `npm start`. If your sandbox restricts Turbopack worker ports, use `npm run build -- --webpack`.
+Start Event plays three connected scenes and pauses at a checkpoint. Continue plays another three. Next Event plays one scene. Pause, speed (1×/2×/4×), Reset World, separate music/SFX controls, and tab-visibility suspension are supported. Reset clears the village’s memories, not the server’s usage ledger. Memory persists within the page session, not across refreshes.
 
-## An afternoon in Littlehaven
+Residents meet in pairs while another pursues an independent activity. Morning, afternoon and evening lead into the next day. Clicking a resident reveals moods, recent memories, important promises/discoveries and friendships. Cultural evidence and numerical decision factors live in expandable diagnostics, never character speech.
 
-Select Mia, Kai, or Luna to highlight their sprite. **Start Event** runs the complete state machine: idle → gathering → proposing → deliberating → deciding → traveling → completing an activity → finished. Each resident has a personality, goal, cultural interests, and weighted taste profile.
+## GroqCloud Free Plan
 
-The residents discuss their own proposals, negotiate a shared destination, walk along the town's paths, and react to their completed activity. The original town and characters are retained; the former Moonbeam building is now labeled **The Museum**, alongside **The Daily Cup** and **The Green Room**.
+The only live LLM adapter is the official `groq-sdk`, with `openai/gpt-oss-120b`. No Google, Vertex, Gemini or xAI account is needed. No billing, credit purchases, plan upgrades or paid-provider switching are implemented.
 
-- **Change the situation** before or during an event: a gentle afternoon, rain, or a surprise live performance. All scores are recomputed. During an event, residents return from their current positions to the square, discuss the new context, and make a new decision. Previous conversations and decision entries remain available.
-- **Pause/resume**, **reset**, **replay**, and **resident names** work independently of audio settings. Replay starts a fresh run using the selected situation. Reset returns to idle.
-- The current speaker has a speech bubble, a matching conversation entry, and a unique procedural talking sound. Expand conversation history to read previous messages.
-- The decision log includes cultural profiles, goals, all destination scores and reasons, proposals, the compromise, context changes, arrivals, and completion.
+Get a key from https://console.groq.com/keys and confirm the account is on the **Free Plan**. Set the server-only variables documented in `.env.example`. `GROQ_FREE_PLAN_CONFIRMED=true` is an operator assertion, not an API billing-tier check; a successful generation alone cannot prove an account’s billing tier. Configure request/token ceilings below the available account limits, including usage by other applications. Groq’s own Free Plan limits remain authoritative.
 
-## Transparent decisions, mock data
+```sh
+node scripts/verify-groq.mjs
+```
 
-The `TasteProvider` interface accepts profiles, destinations, and context and asynchronously returns scored recommendations with explicit provenance. Only `mockTasteProvider` is implemented. No Qloo API or LLM is contacted, and no mock result is attributed to Qloo.
+Run this against the dev server (`WORLDLINGS_URL` defaults to `http://localhost:3000`). It makes a single scene request through the same validation and quota path used by the village. A transient server error may use the one permitted retry. It reports Groq Live only for an actual validated scene. Errors and offline scenes remain labeled Groq Mock / Mock Fallback. `.env.local` is ignored by Git.
 
-For each resident, the mock provider computes a weighted taste match, then applies documented context adjustments. Group satisfaction is **65% average score + 35% minimum individual score**, so the least-satisfied person matters. Ties prefer the higher minimum, then a stable destination ID. The winner is calculated from the supplied scores, never fixed in UI or simulation code.
+Scenes use one request for all dialogue beats, strict JSON Schema output, and a second Zod/semantic validation pass. Prompts include profiles, moods, goals, current locations, bounded conversation context, relevant memories, relationships, cultural evidence, engine-selected plans and allowed actions. The engine owns destinations and movement. Invalid or ungrounded output falls back safely. The live generation schema limits the square encounter to expressive emotes, with travel executed afterward by the planner. Runtime validation also supports targeted actions: pointing requires a valid destination and walking is allowed only on the final beat to the engine-approved location. Emotes, bubbles, speaker-specific sounds and movement follow the playback clock. Memories and relationship changes apply after their referenced beats; activities and incidents commit after arrival.
 
-The current profiles produce different outcomes for sunny, rainy, and live-performance contexts, but a situation change does not require a different winner. Contextual dialogue templates refer to the actual proposals, scores, situation, and selected activity; there is no permanently fixed dialogue sequence. This is a deterministic local simulation, not generative AI.
+### Bounded usage and deployment
 
-A future Qloo adapter should call a server-side route, keep keys on the server, validate response completeness and scores, map results to the venue model, and set `LIVE Qloo` provenance only for real responses. Provider failures leave the simulation recoverable. An LLM is not required.
+- Default maximum: 10 live attempts per server-issued session, including retries. Automatic playback stops after three scenes; continuation requires a click.
+- Daily request and conservative token reservations, minute ceilings, minimum spacing, 18-second request timeout and at most one transient 5xx retry. Authentication/429 errors pause live generation for that session. Token usage is recorded; account remaining-token/request headers constrain later reservations.
+- Quota reservations happen **before** network I/O and persist in `.worldlings/quota.json`, protected by an atomic filesystem lock. New cookies, reset and refreshed browsers do not reset global ceilings. At most 100 sessions can be issued per UTC day.
+- API requests require the same origin, bounded bodies and validated state. Credentials never reach the browser.
+- Production live mode fails closed unless `WORLDLINGS_SINGLE_INSTANCE=true` and `WORLDLINGS_QUOTA_DIR` points to a persistent writable directory on a **single server**. Do not opt in on ephemeral/serverless or multiple independent instances. Those deployments run the mock simulation until an atomic shared quota backend is implemented. No paid infrastructure is required.
+- A crashed process can leave the lock directory behind. It intentionally blocks live calls; after verifying no request is active, remove the stale `quota.lock` directory, preserving `quota.json`. Never delete the ledger to bypass the daily ceiling.
 
-## Original procedural audio
+API docs checked: [Groq structured output](https://console.groq.com/docs/structured-outputs), [account-specific rate limits](https://console.groq.com/docs/rate-limits). The SDK disables implicit retries so every attempted request must obtain a reservation.
 
-Music starts only after a user interaction. The soundtrack is an original eight-bar melody at 76 BPM with quiet triangle plucks, sine harmonies, and a light accompaniment. One look-ahead scheduler uses the AudioContext clock; smooth gain envelopes and a shared compressor limit clicks and peaks.
+## Cultural evidence and destinations
 
-Mia has mellow, warm sine chirps; Kai has lower, faster triangle chirps; Luna has slower, airy sine chirps with a faint bell harmonic. Chatter is throttled to short 65–95 ms notes, stops when the speaker changes or playback pauses, and is independent of the simulation clock.
+The old Museum bias came from fixed taste-only scores and always selecting one group compromise. The living planner considers mood, energy, hunger/current goals, relationships, recent experiences, visit penalties, novelty, weather/events and small seeded variation. Residents select individually; a pair compromises only within a small loss window. There is no destination rotation or hard-coded winner.
 
-Music and effects have separate toggles and volume sliders. Effects include soft interaction, decision, and infrequent bird sounds. Hidden tabs suspend audio and simulation, and resume the active line on return. Muted settings survive replay/reset for the current page session. Unmounting stops timers, disconnects nodes, and closes the context. The game works if Web Audio is unavailable.
+`TasteProvider` is separate from `LLMProvider`. Qloo defaults to Mock while the key is pending. Mock cultural signals are explicitly illustrative and have **no fabricated affinity numbers**. To enable Qloo later, set `QLOO_MODE=live`, `QLOO_API_KEY`, and real cultural seed entity IDs for each resident using the variables in `.env.example`. The adapter queries artist recommendations through Qloo Insights, validates actual entities/affinities, caches successful results, and falls back on errors. It never looks up fictional village buildings. Real evidence affects local cultural-fit factors, dialogue context, discoveries and subsequently learned interests. Qloo Live appears only after successful real responses; this adapter has not yet been verified with a Qloo key.
 
 ## Modules
 
-- `lib/world/profiles.ts`: residents, taste profiles, situations, destinations.
-- `lib/world/taste-provider.ts`: replaceable asynchronous provider and deterministic mock scores.
-- `lib/world/decision.ts`: validation, proposals, and collective scoring.
-- `lib/world/dialogue.ts`: context-sensitive proposals, negotiation, and reactions.
-- `lib/world/simulation.ts`: pure state machine, history, phase transitions, and decision log.
-- `lib/world/movement.ts`: routes and integer positions along existing town paths.
-- `lib/world/audio/engine.ts`: music scheduling, output buses, lifecycle, and effects.
-- `lib/world/audio/voices.ts`: distinct resident sound identities.
-- `lib/world/art.ts`: original pixel renderer at 480 × 320 logical resolution, nearest-neighbor display.
-- `components/world/use-world.ts`: playback, provider requests, visibility, and audio coordination.
-- `components/world/worldlings.tsx`: existing town layout and interactive React overlays.
+- `lib/world/living/planner.ts`: individual scoring, encounters, contextual incidents.
+- `lib/world/living/engine.ts`: playback, movement, clock, bounded memories and relationships.
+- `lib/world/living/validation.ts`: strict output schema and semantic validation.
+- `lib/world/living/mock.ts`: replaceable offline scene provider.
+- `lib/world/server/`: Groq, Qloo and durable server quota adapters.
+- `app/api/world/`: same-origin scene/session routes.
+- `components/world/use-world.ts`: bounded autoplay, fetch lifecycle, audio and controls.
+- `lib/world/art.ts`, `movement.ts`, `audio/`: preserved town, paths and sound systems.
+
+The original single-event engine remains for regression coverage; the UI now uses the living engine. Offline dialogue is templated and labeled honestly, while live Groq dialogue is generated from actual scene context.
 
 ## Verification
 
@@ -63,6 +67,19 @@ npm run lint
 npm run build -- --webpack
 ```
 
-The Node tests use the existing TypeScript compiler and no additional test dependency. They cover computed winners, malformed provider data, every phase and arrival, continuous vs. large ticks, changes during every phase, context-driven dialogue, replay, pixel rendering, and audio scheduler/mute/visibility/disposal behavior. The test command uses Node's `--test-isolation=none`; verified with Node 26.1.0.
+The regression suite covers the original renderer/audio plus multi-day scenes, independent routes, bounded memories, promise retention, invalid actions, memory commit timing, evidence-sensitive scoring and durable quota enforcement. Browser checks use an existing Playwright/Chromium installation:
 
-An optional end-to-end scenario is saved in `tests/browser-check.cjs`. It uses an already-installed Playwright and Chromium, without adding them to the application dependencies. With a local server running, set `WORLDLINGS_PLAYWRIGHT_PATH` to the installed Playwright package and `WORLDLINGS_BROWSER_PATH` to the Chromium executable, then run `node tests/browser-check.cjs`. `WORLDLINGS_URL` defaults to `http://localhost:3000`. The scenario checks every outcome, pause/replay, audio controls, mobile layout, and browser errors; screenshots go to `/tmp`.
+```sh
+WORLDLINGS_URL=http://localhost:3001 \
+WORLDLINGS_PLAYWRIGHT_PATH=/path/to/playwright \
+WORLDLINGS_BROWSER_PATH=/path/to/chromium \
+node tests/living-browser.cjs
+```
+
+Run that test against a production server with default production live safeguards (mock mode). It checks connected scenes, pause, speed, checkpoints, rollover, memories, audio controls, mobile overflow, reset and API validation. Screenshots go to `/tmp/worldlings-living-{desktop,mobile}.png`.
+
+Backlog: diaries, relationship timelines, knowledge-graph visualization, richer memory retrieval and cross-refresh persistence. No graph database is needed for this version.
+
+## Live verification status (2026-10-24)
+
+The account owner confirmed the Free Plan and 30 RPM. Real requests authenticated and reached `openai/gpt-oss-120b`, but a fully accepted live scene was **not** verified. Tests exposed Groq strict-schema compiler/validation errors; the latest live error was HTTP 400 `json_validate_failed` for an emotion outside the allowed enum. The schema and prompt were simplified/tightened afterward. Further live verification is blocked by the conservative daily token reservation ceiling (which was preserved). The interface remains Groq Mock until an actual validated request succeeds. Re-run `scripts/verify-groq.mjs` after the daily budget resets. Qloo remains Mock while its key is pending.

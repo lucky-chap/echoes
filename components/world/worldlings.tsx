@@ -27,14 +27,20 @@ import {
   CloudRain,
 } from "lucide-react"
 import { drawResident, drawTown, HEIGHT, WIDTH } from "@/lib/world/art"
+import { residents, destination, type Situation } from "@/lib/world/profiles"
 import {
-  residents,
-  destination,
-  situationNames,
-  type Situation,
-} from "@/lib/world/profiles"
-import { phaseNames, phases } from "@/lib/world/simulation"
+  phaseNames as originalPhaseNames,
+  phases,
+} from "@/lib/world/simulation"
 import { useWorld } from "./use-world"
+
+const phaseNames = {
+  ...originalPhaseNames,
+  gathering: "Crossing paths",
+  proposing: "A chance encounter",
+  completing: "Following our interests",
+  finished: "A little pause",
+}
 
 function Portrait({
   index,
@@ -67,6 +73,10 @@ export default function Worldlings() {
   const canvas = useRef<HTMLCanvasElement>(null)
   const {
     sim,
+    speed,
+    setSpeed,
+    nextEvent,
+    checkpoint,
     paused,
     hidden,
     loading,
@@ -99,7 +109,22 @@ export default function Worldlings() {
   const decided = ["deciding", "traveling", "completing", "finished"].includes(
     sim.phase
   )
-  const winner = sim.decision ? destination(sim.decision.winner.id) : null
+  const winner = sim.bundle
+    ? destination(sim.bundle.plan.destinations[residents[selected].id])
+    : null
+  const meeting =
+    sim.bundle &&
+    sim.bundle.plan.participants.every(
+      (id) =>
+        sim.bundle!.plan.destinations[id] ===
+        sim.bundle!.plan.destinations[sim.bundle!.plan.participants[0]]
+    )
+      ? destination(
+          sim.bundle.plan.destinations[sim.bundle.plan.participants[0]]
+        )
+      : null
+  const agent = sim.world.agents[selected]
+  const diagnostics = sim.bundle?.diagnostics
   const logs = sim.logs
   useEffect(() => {
     const c = canvas.current?.getContext("2d")
@@ -112,7 +137,7 @@ export default function Worldlings() {
         sim.positions,
         moving,
         activeSpeaker,
-        sim.phase === "completing" ? sim.decision?.winner.id : undefined
+        sim.phase === "completing" ? sim.bundle?.plan.destinations : undefined
       )
   }, [
     elapsed,
@@ -122,7 +147,7 @@ export default function Worldlings() {
     moving,
     activeSpeaker,
     sim.phase,
-    sim.decision,
+    sim.bundle,
   ])
   useEffect(() => {
     if (!help) return
@@ -175,7 +200,12 @@ export default function Worldlings() {
             )}
             <div>
               <strong>
-                Day 01 <span>·</span> {situationNames[sim.situation]}
+                Day {String(sim.world.day).padStart(2, "0")} <span>·</span>{" "}
+                {sim.world.hour < 12
+                  ? "Morning"
+                  : sim.world.hour < 17
+                    ? "Afternoon"
+                    : "Evening"}
               </strong>
               <small>
                 {sim.situation === "rain"
@@ -215,8 +245,7 @@ export default function Worldlings() {
                 aria-label="Pixel-art Littlehaven: a café and music venue to the north, a fountain in the central town square, a pond to the west, and a museum to the east. Mia, Kai, and Luna gather here."
               />
               <div className="map-label">
-                <Sun size={14} /> LITTLEHAVEN <span>•</span> 2:
-                {String(30 + Math.floor(elapsed / 60)).padStart(2, "0")} PM
+                <Sun size={14} /> LITTLEHAVEN <span>•</span> Day {sim.world.day} · {sim.world.hour}:00
               </div>
               <div className="square-label">TOWN SQUARE</div>
               {sim.situation === "rain" && (
@@ -233,22 +262,61 @@ export default function Worldlings() {
                     } as CSSProperties
                   }
                 >
-                  <strong>{residents[activeSpeaker].name}</strong>
+                  <strong>
+                    {residents[activeSpeaker].name}{" "}
+                    <span aria-label={sim.speech.action}>
+                      {
+                        {
+                          laugh: "♫",
+                          wave: "👋",
+                          shrug: "…",
+                          point: "☞",
+                          sketch: "✎",
+                          dance: "♪",
+                          sit: "☕",
+                          observe: "◉",
+                          react: "!",
+                          talk: "",
+                          walk_to: "➜",
+                        }[sim.speech.action]
+                      }
+                    </span>
+                  </strong>
                   <p>{sim.speech.text}</p>
                   <small>
-                    {paused ? "Paused" : `${phaseNames[sim.phase]} · speaking`}
+                    {paused
+                      ? "Paused"
+                      : `${sim.speech.emotion} · ${sim.speech.action}`}
                   </small>
+                </div>
+              )}
+              {sim.phase === "completing" && sim.bundle?.plan.incident && (
+                <div
+                  className="incident-emote"
+                  style={{
+                    left: `${(sim.positions[residents.findIndex((r) => r.id === sim.bundle!.plan.incident!.actor)][0] / WIDTH) * 100}%`,
+                    top: `${(sim.positions[residents.findIndex((r) => r.id === sim.bundle!.plan.incident!.actor)][1] / HEIGHT) * 100}%`,
+                  }}
+                  aria-label={sim.bundle.plan.incident.description}
+                >
+                  {sim.bundle.plan.incident.id === "unexpected-portrait"
+                    ? "✎"
+                    : sim.bundle.plan.incident.emotion === "annoyed"
+                      ? "☂"
+                      : "♫"}
                 </div>
               )}
               {sim.phase === "completing" && winner && (
                 <div className="activity-banner">
-                  At {winner.name} · {winner.activity}
+                  Everyone settles into their plans
                 </div>
               )}
               <div className="map-bottom">
                 <span>
                   <span className="status-dot" /> {phaseNames[sim.phase]}
-                  {decided && winner ? ` · ${winner.name}` : ""}
+                  {decided && winner
+                    ? ` · ${residents[selected].name}: ${winner.name}`
+                    : ""}
                 </span>
                 <button
                   onClick={() => setLabels((v) => !v)}
@@ -266,7 +334,10 @@ export default function Worldlings() {
                 stories.
               </span>
               <div>
-                <span className="mock-pill">DEMO WORLD</span>
+                <span className="mock-pill">
+                  {diagnostics?.llm ?? "Groq Mock"} ·{" "}
+                  {diagnostics?.taste ?? "Qloo Mock"}
+                </span>
                 <button
                   className="icon-button"
                   disabled={!started || complete}
@@ -277,7 +348,7 @@ export default function Worldlings() {
                 </button>
                 <button
                   className="icon-button"
-                  aria-label="Reset demo"
+                  aria-label="Reset World"
                   onClick={reset}
                 >
                   <RotateCcw size={15} />
@@ -354,23 +425,41 @@ export default function Worldlings() {
               <button
                 className="start-button"
                 aria-label={
-                  complete ? "Replay event from town" : "Start event from town"
+                  complete ? "Continue from town" : "Start event from town"
                 }
                 disabled={loading || (started && !complete)}
                 onClick={start}
               >
                 {complete
-                  ? "Replay afternoon"
+                  ? "Continue"
                   : started
                     ? phaseNames[sim.phase]
                     : "Start Event"}
               </button>
+              <button
+                onClick={nextEvent}
+                disabled={loading || (started && !complete)}
+              >
+                Next Event
+              </button>
+              <label>
+                Speed{" "}
+                <select
+                  aria-label="Simulation speed"
+                  value={speed}
+                  onChange={(e) => setSpeed(Number(e.target.value))}
+                >
+                  <option value={1}>1×</option>
+                  <option value={2}>2×</option>
+                  <option value={4}>4×</option>
+                </select>
+              </label>
               <label>
                 Situation
                 <select
                   aria-label="Situation from town"
                   value={sim.situation}
-                  disabled={loading}
+                  disabled={loading || (started && !complete)}
                   onChange={(e) => changeSituation(e.target.value as Situation)}
                 >
                   <option value="sunny">Gentle afternoon</option>
@@ -407,21 +496,17 @@ export default function Worldlings() {
                         <span className={`resident-state state-${i}`}>
                           {activeSpeaker === i
                             ? "Speaking"
-                            : moving
-                              ? "On the way"
-                              : complete
-                                ? "Content"
-                                : started
-                                  ? "Listening"
-                                  : [
-                                      "Feeling curious",
-                                      "Taking it easy",
-                                      "Daydreaming",
-                                    ][i]}
+                            : sim.world.agents[i].mood}
                         </span>
                       </span>
                       <span className="interests">
-                        {r.interests.join(" · ")}
+                        {sim.world.agents[i].location === "square"
+                          ? "Town square"
+                          : destination(
+                              sim.world.agents[i].location as
+                                "cafe" | "music" | "museum"
+                            ).name}{" "}
+                        · {moving ? "On the way" : sim.world.agents[i].goal}
                       </span>
                     </span>
                     <ChevronRight size={14} />
@@ -430,8 +515,50 @@ export default function Worldlings() {
               </div>
               <div className="resident-detail">
                 <span className="status-dot" />
-                {residents[selected].goal}
+                {agent.goal}
               </div>
+              <details className="memory-panel">
+                <summary>
+                  {residents[selected].name}’s memories & friendships
+                </summary>
+                <p>
+                  {agent.mood} · Energy {Math.round(agent.energy)} ·{" "}
+                  {agent.goal}
+                </p>
+                {residents
+                  .filter((r) => r.id !== agent.id)
+                  .map((r) => (
+                    <p key={r.id}>
+                      {r.name}:{" "}
+                      {agent.relationships[r.id] >= 65
+                        ? "Growing closer"
+                        : agent.relationships[r.id] < 45
+                          ? "A little tension"
+                          : "Getting to know each other"}
+                    </p>
+                  ))}
+                <ul>
+                  {agent.memories.slice(-4).map((m) => (
+                    <li key={m.id}>
+                      Day {m.day}: {m.text}
+                    </li>
+                  ))}
+                </ul>
+                {agent.memorySummary && <p>{agent.memorySummary}</p>}
+                {!agent.memories.length && (
+                  <p>A fresh page. Experiences will stay with them.</p>
+                )}
+                {agent.important.length > 0 && (
+                  <>
+                    <strong>What stays with me</strong>
+                    <ul>
+                      {agent.important.map((m) => (
+                        <li key={m.id}>{m.text}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </details>
             </section>
             <section className="event-card">
               <div className="eyebrow">
@@ -446,8 +573,8 @@ export default function Worldlings() {
                 <span className="ground-line" />
               </div>
               <h2>
-                {decided && winner ? (
-                  winner.name
+                {decided && sim.bundle ? (
+                  (meeting?.name ?? "Different little adventures")
                 ) : (
                   <>
                     A little town
@@ -457,11 +584,8 @@ export default function Worldlings() {
                 )}
               </h2>
               <p>
-                {complete && winner
-                  ? winner.outcome
-                  : started
-                    ? phaseNames[sim.phase]
-                    : "Good company doesn’t need a big occasion. Bring everyone to the square."}
+                {sim.bundle?.scene.summary ??
+                  "A chance encounter, separate plans, and something unexpected around the corner."}
               </p>
               {started && (
                 <div
@@ -477,67 +601,31 @@ export default function Worldlings() {
                   ))}
                 </div>
               )}
-              {sim.decision && sim.phase !== "gathering" && (
+              {sim.bundle && (
                 <div className="proposal-list">
                   {residents.map((r) => (
                     <div key={r.id}>
                       <strong>{r.name}</strong>
                       <span>
-                        {destination(sim.decision!.proposals[r.id]).name}
+                        {destination(sim.bundle!.plan.destinations[r.id]).name}
                       </span>
-                      <small>
-                        {
-                          sim.decision!.recommendations.find(
-                            (v) =>
-                              v.residentId === r.id &&
-                              v.destinationId === sim.decision!.proposals[r.id]
-                          )!.score
-                        }
-                      </small>
                     </div>
                   ))}
-                  <details>
-                    <summary>
-                      {decided ? "Why this choice?" : "Compare all choices"}
-                    </summary>
-                    <p>{sim.decision.explanation}</p>
-                    {sim.decision.alternatives.map((a) => (
-                      <div key={a.id}>
-                        {destination(a.id).name}
-                        <strong>{a.collective.toFixed(1)}</strong>
-                      </div>
-                    ))}
-                  </details>
                 </div>
               )}
-              {decided && sim.decision && (
-                <p className="decision-summary">
-                  Best shared fit: {sim.decision.winner.collective.toFixed(1)}
-                  /100. Every resident scores at least{" "}
-                  {sim.decision.winner.minimum}.
-                </p>
-              )}
-              {complete && sim.decision && (
-                <div className="outcome-reactions">
-                  {residents.map((r) => (
-                    <span key={r.id}>
-                      {r.name}:{" "}
-                      {sim.decision!.winner.scores[r.id] >= 75
-                        ? "Loved it"
-                        : sim.decision!.winner.scores[r.id] >= 60
-                          ? "Glad we went"
-                          : "Enjoyed the company"}
-                    </span>
-                  ))}
-                </div>
+              {sim.world.events.length > 0 && (
+                <p className="recent-incident">Recently: {sim.world.events.at(-1)}</p>
               )}
               <div className="event-meta">
                 <span>
                   <MapPin size={13} />
-                  {decided && winner ? winner.name : "Town square"}
+                  {decided
+                    ? (meeting?.name ?? "Around Littlehaven")
+                    : "Town square"}
                 </span>
                 <span>
-                  <Users size={13} />3 neighbors
+                  <Users size={13} />
+                  {sim.bundle?.plan.participants.length ?? 2} crossing paths
                 </span>
               </div>
               <button
@@ -555,7 +643,7 @@ export default function Worldlings() {
                 {loading
                   ? "Getting ready…"
                   : complete
-                    ? "Replay afternoon"
+                    ? "Continue"
                     : started
                       ? paused
                         ? "Afternoon paused"
@@ -565,7 +653,9 @@ export default function Worldlings() {
               </button>
               <span className="event-footnote">
                 {complete
-                  ? "A lovely afternoon, ready to relive."
+                  ? sim.world.completed >= checkpoint
+                    ? "A quiet checkpoint. Continue for three more scenes."
+                    : "The next moment is on its way."
                   : "A small moment. A possible friendship."}
               </span>
               {error && <p role="alert">{error}</p>}
@@ -574,7 +664,7 @@ export default function Worldlings() {
                 <select
                   id="situation"
                   value={sim.situation}
-                  disabled={loading}
+                  disabled={loading || (started && !complete)}
                   onChange={(e) => changeSituation(e.target.value as Situation)}
                 >
                   <option value="sunny">A gentle afternoon</option>
@@ -583,7 +673,7 @@ export default function Worldlings() {
                 </select>
                 <small>
                   {started
-                    ? "New context → fresh scores → a new conversation."
+                    ? "Change the weather between scenes."
                     : "Choose a context, then start your afternoon."}
                 </small>
               </div>
@@ -614,9 +704,11 @@ export default function Worldlings() {
                 onClick={() => setTab("log")}
               >
                 <Flag size={14} />
-                Decision log<span className="count">{logs.length}</span>
+                World log<span className="count">{logs.length}</span>
               </button>
-              <span className="script-label">MOCK TASTES</span>
+              <span className="script-label">
+                {diagnostics?.taste ?? "Qloo Mock"}
+              </span>
             </div>
             <div
               id="story-content"
@@ -702,6 +794,51 @@ export default function Worldlings() {
               </details>
             )}
           </section>
+          <details className="provider-details">
+            <summary>
+              Cultural signals & developer inspection ·{" "}
+              {diagnostics?.llm ?? "Groq Mock"} ·{" "}
+              {diagnostics?.taste ?? "Qloo Mock"}
+            </summary>
+            <p>
+              {diagnostics?.reason ??
+                "Live status appears only after a successful scene response."}
+            </p>
+            <p>{diagnostics?.tasteReason}</p>
+            <p>
+              Groq requests: {diagnostics?.calls ?? 0}/
+              {diagnostics?.limit ?? 10} · Scene tokens:{" "}
+              {diagnostics?.inputTokens ?? 0} in /{" "}
+              {diagnostics?.outputTokens ?? 0} out
+            </p>
+            <ul>
+              {diagnostics?.signals.map((signal, i) => (
+                <li key={i}>
+                  {signal.residentId}: {signal.name} · {signal.source}
+                  {signal.entityId
+                    ? ` · ${signal.entityId}`
+                    : " · illustrative interest"}
+                  {signal.affinity !== null
+                    ? ` · affinity ${signal.affinity}`
+                    : ""}
+                </li>
+              ))}
+            </ul>
+            <p>
+              Local activity scores combine cultural fit, mood, energy, goals,
+              relationships, weather, recent visits and seeded variation. They
+              are not Qloo affinity scores.
+            </p>
+            {sim.bundle?.plan.scores.map((row) => (
+              <p key={`${row.residentId}-${row.destinationId}`}>
+                {row.residentId} → {destination(row.destinationId).name}:{" "}
+                {row.total} ·{" "}
+                {Object.entries(row.factors)
+                  .map(([key, value]) => `${key} ${value}`)
+                  .join(" / ")}
+              </p>
+            ))}
+          </details>
           <div className="demo-note">
             <span className="note-icon">
               <Leaf size={18} />
@@ -709,9 +846,9 @@ export default function Worldlings() {
             <div>
               <strong>Small world. Room to grow.</strong>
               <p>
-                Deterministic agents, contextual dialogue, and explicitly MOCK
-                taste data. Decisions are calculated locally. No live AI or Qloo
-                connection.
+                {diagnostics?.llm === "Groq Live"
+                  ? "Groq Live · A new story, shaped by their memories."
+                  : "Groq Mock · Mock Fallback. The village keeps going offline."}
               </p>
             </div>
             <ArrowDownRight size={18} />
@@ -749,9 +886,8 @@ export default function Worldlings() {
             <Leaf size={28} />
             <h2 id="help-title">A little guide to Littlehaven</h2>
             <p>
-              Select a resident to highlight them in town. Start an event to
-              bring all three neighbors to the square and hear their
-              conversation.
+              Select a resident to see their memories and friendships. Start an
+              event to watch neighbors cross paths and follow their interests.
             </p>
             <p>
               Use pause to linger, or reset to begin again. The decision log
@@ -760,10 +896,10 @@ export default function Worldlings() {
             <div className="help-note">
               <Clock3 size={18} />
               <span>
-                Residents propose, negotiate, choose, travel, and complete an
-                activity. Change the situation to reevaluate their choices.
-                Music and character sounds have independent controls. All taste
-                data is MOCK, not live Qloo.
+                Watch three connected scenes, then Continue at the checkpoint.
+                Next Event plays one scene. Change the situation between scenes.
+                Music and character sounds have independent controls. Provider
+                status and cultural evidence appear below the town.
               </span>
             </div>
           </section>
