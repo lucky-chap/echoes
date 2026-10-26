@@ -120,7 +120,10 @@ const assert = require("node:assert/strict")
       /The Green Room/
     )
     await page.getByRole("tab", { name: /Decision log/ }).click()
-    assert.match(await page.locator(".decision-log").textContent(), /MOCK/)
+    assert.match(
+      await page.locator(".decision-log").textContent(),
+      /Mia|Kai|Luna/
+    )
     assert.match(
       await page.locator(".decision-log").textContent(),
       /Reevaluating/

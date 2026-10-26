@@ -13,8 +13,10 @@ interface Session {
   blocked: boolean
   input: number
   output: number
+  reserved?: number
 }
 interface Ledger {
+  version?: number
   day: string
   calls: number
   tokens: number
@@ -27,6 +29,34 @@ interface Ledger {
   providerRequests?: number
   sessions: Record<string, Session>
 }
+
+function freshLedger(day: string): Ledger {
+  return {
+    version: 2,
+    day,
+    calls: 0,
+    tokens: 0,
+    minute: 0,
+    minuteCalls: 0,
+    minuteTokens: 0,
+    sessions: {},
+  }
+}
+
+function migrateLedger(ledger: Ledger) {
+  if (ledger.version === 2) return ledger
+  // Version 1 retained worst-case reservations even after provider usage was
+  // known. Rebuild token usage from completed calls; no request is in flight
+  // while a new server process is loading this migration.
+  ledger.tokens = Object.values(ledger.sessions).reduce(
+    (total, session) => total + session.input + session.output,
+    0
+  )
+  ledger.minuteTokens = 0
+  for (const session of Object.values(ledger.sessions)) session.reserved = 0
+  ledger.version = 2
+  return ledger
+}
 export function setting(name: string, fallback: number, max = 100000) {
   const n = Number(process.env[name])
   return Number.isInteger(n) && n > 0 ? Math.min(n, max) : fallback
@@ -34,14 +64,9 @@ export function setting(name: string, fallback: number, max = 100000) {
 export const sessionLimit = () => setting("MAX_LLM_CALLS_PER_SESSION", 10, 10)
 export function liveUnavailable() {
   if (!process.env.GROQ_API_KEY)
-    return "GROQ_API_KEY is not configured. Mock fallback is active."
-  if (
-    process.env.GROQ_MODEL &&
-    process.env.GROQ_MODEL !== "openai/gpt-oss-120b"
-  )
-    return "Only the requested openai/gpt-oss-120b model is enabled."
+    return "GROQ_API_KEY is not configured. Dialogue withheld; independent activities continue."
   if (process.env.LLM_PROVIDER !== "groq")
-    return "LLM_PROVIDER is not groq. Mock fallback is active."
+    return "LLM_PROVIDER is not groq. Dialogue withheld; independent activities continue."
   if (process.env.GROQ_FREE_PLAN_CONFIRMED !== "true")
     return "Confirm the account uses the Groq Free Plan before enabling live generation."
   if (
@@ -58,7 +83,7 @@ export function liveUnavailable() {
     (process.env.WORLDLINGS_SINGLE_INSTANCE !== "true" ||
       !process.env.WORLDLINGS_QUOTA_DIR)
   )
-    return "Public live generation requires a single server with a persistent quota directory. Mock fallback is active."
+    return "Public live generation requires a single server with a persistent quota directory. Dialogue withheld; independent activities continue."
   return null
 }
 /** Atomic filesystem lock, durable reservations before network I/O. Fail closed on storage errors.
@@ -80,26 +105,10 @@ function transaction<T>(fn: (ledger: Ledger) => T): T {
       ledger = JSON.parse(readFileSync(join(root, "quota.json"), "utf8"))
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e
-      ledger = {
-        day: "",
-        calls: 0,
-        tokens: 0,
-        minute: 0,
-        minuteCalls: 0,
-        minuteTokens: 0,
-        sessions: {},
-      }
+      ledger = freshLedger("")
     }
-    if (ledger.day !== day)
-      ledger = {
-        day,
-        calls: 0,
-        tokens: 0,
-        minute: 0,
-        minuteCalls: 0,
-        minuteTokens: 0,
-        sessions: {},
-      }
+    ledger = migrateLedger(ledger)
+    if (ledger.day !== day) ledger = freshLedger(day)
     const result = fn(ledger)
     writeFileSync(join(root, "quota.tmp"), JSON.stringify(ledger), {
       mode: 0o600,
@@ -115,7 +124,14 @@ export function createSession() {
     if (Object.keys(l.sessions).length >= 100)
       throw Error("Daily session ceiling reached. Continue in offline mode.")
     const id = randomUUID()
-    l.sessions[id] = { calls: 0, last: 0, blocked: false, input: 0, output: 0 }
+    l.sessions[id] = {
+      calls: 0,
+      last: 0,
+      blocked: false,
+      input: 0,
+      output: 0,
+      reserved: 0,
+    }
     return id
   })
 }
@@ -142,7 +158,7 @@ export function reserve(id: string, tokens: number) {
       minute = Math.floor(now / 60000)
     if (l.cooldown && now < l.cooldown)
       throw Error(
-        "Groq rate-limit cooldown is active. Mock fallback is active."
+        "Groq rate-limit cooldown is active. Dialogue withheld; independent activities continue."
       )
     if (l.minute !== minute) {
       l.minute = minute
@@ -156,27 +172,32 @@ export function reserve(id: string, tokens: number) {
       l.providerTokens < tokens
     )
       throw Error(
-        "Groq account token window is resting. Mock fallback is active."
+        "Groq account token window is resting. Dialogue withheld; independent activities continue."
       )
     if (l.providerRequests !== undefined && l.providerRequests < 1)
       throw Error("Groq account daily request allowance is exhausted.")
     if (now - s.last < 1500)
-      throw Error("Requests are too close together. Mock fallback is active.")
+      throw Error("Requests are too close together. The current gathering is preserved.")
     if (
       l.calls >= setting("GROQ_DAILY_REQUEST_LIMIT", 20) ||
       l.tokens + tokens > setting("GROQ_DAILY_TOKEN_LIMIT", 40000)
     )
-      throw Error("Daily free-use ceiling reached. Mock fallback is active.")
+      throw Error(
+        "Daily free-use ceiling reached. Dialogue withheld; independent activities continue."
+      )
     if (
       l.minuteCalls >= setting("GROQ_REQUESTS_PER_MINUTE", 2) ||
       l.minuteTokens + tokens > setting("GROQ_TOKENS_PER_MINUTE", 12000)
     )
-      throw Error("Server minute ceiling reached. Mock fallback is active.")
+      throw Error(
+        "Server minute ceiling reached. Dialogue withheld; independent activities continue."
+      )
     if (l.providerTokens !== undefined)
       l.providerTokens = Math.max(0, l.providerTokens - tokens)
     if (l.providerRequests !== undefined) l.providerRequests--
     s.calls++
     s.last = now
+    s.reserved = (s.reserved ?? 0) + tokens
     l.calls++
     l.tokens += tokens
     l.minuteCalls++
@@ -193,9 +214,17 @@ export function recordUsage(
   transaction((l) => {
     const s = l.sessions[id]
     if (s) {
+      const reserved = s.reserved ?? 0
+      if (reserved) {
+        const actual = input + output
+        l.tokens = Math.max(0, l.tokens + actual - reserved)
+        if (l.minute === Math.floor(Date.now() / 60000))
+          l.minuteTokens = Math.max(0, l.minuteTokens + actual - reserved)
+        s.reserved = 0
+      }
       s.input += input
       s.output += output
-      s.blocked = blocked
+      s.blocked ||= blocked
     }
   })
 }

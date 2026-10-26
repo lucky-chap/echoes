@@ -1,6 +1,5 @@
 import { squareOccupants } from "./presence"
 import {
-  destination,
   destinations,
   residents,
   type DestinationId,
@@ -32,6 +31,7 @@ export function newWorld(): Snapshot {
       hunger: [72, 33, 40][i],
       social: [82, 70, 35][i],
       goal: r.goal,
+      currentActivity: "Starting the day",
       location: ["cafe", "music", "museum"][i] as DestinationId,
       recentVisits: [],
       memories: [],
@@ -41,9 +41,20 @@ export function newWorld(): Snapshot {
       learned: {},
     })),
     recentDialogue: [],
+    recentScenes: [],
     events: [],
     incidents: [],
     lastParticipants: [],
+    tasteProfiles: residents.map((r) => ({
+      residentId: r.id,
+      configuredInterests: r.qlooSeeds.map((interest) => ({ ...interest })),
+      verifiedInterests: [],
+      preferenceChanges: [],
+      lastUpdated: null,
+    })),
+    discoveries: [],
+    socialMemories: [],
+    gatherings: [],
   }
 }
 export function seeded(seed: number, salt: number) {
@@ -124,7 +135,7 @@ export function scoreDestinations(
       const affinitySignals = signals.filter(
         (s) =>
           s.residentId === agent.id &&
-          s.source === "LIVE Qloo" &&
+          (s.source === "LIVE Qloo" || s.source === "CACHED Qloo") &&
           s.affinity !== null
       )
       // Qloo's real affinity stays on the signal. This bounded mapping is a simulated activity influence.
@@ -132,7 +143,7 @@ export function scoreDestinations(
         (affinitySignals.reduce(
           (sum, s) =>
             sum +
-            (s.affinity ?? 0) *
+            Math.tanh(s.affinity ?? 0) *
               (s.category === "artist"
                 ? d.traits.music
                 : s.category === "movie"
@@ -144,14 +155,15 @@ export function scoreDestinations(
         4
       const factors = {
         culture: round(culture + affinity),
-        mood:
+        mood: round(
           agent.mood === "thoughtful"
             ? d.traits.quiet * 7
             : agent.mood === "excited"
               ? d.traits.music * 7
               : agent.mood === "annoyed"
                 ? d.traits.quiet * 9
-                : 0,
+                : 0
+        ),
         energy: round(
           ((100 - agent.energy) / 100) *
             (d.traits.quiet * 14 - d.traits.music * 5)
@@ -225,42 +237,221 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
         )[0].destinationId,
     ])
   ) as Record<ResidentId, DestinationId>
-  const occupants=squareOccupants(world.positions)
+  const occupants = squareOccupants(world.positions)
   // Evaluate every nonempty subset, rather than selecting from a fixed list of pairs.
-  const groups=Array.from({length:(1<<residents.length)-1},(_,mask)=>residents.filter((_,i)=>(mask+1)&(1<<i)).map(r=>r.id))
-  const ranked=groups.map((group,index)=>{
-    const agents=group.map(id=>world.agents.find(a=>a.id===id)!)
-    const social=agents.reduce((sum,a)=>sum+a.social,0)/agents.length
-    const bonds=agents.flatMap(a=>agents.filter(b=>a.id!==b.id).map(b=>a.relationships[b.id]))
-    const bond=bonds.reduce((s,n)=>s+n,0)/Math.max(1,bonds.length)
-    const score=group.length===1?45+(100-social)*.25+(agents[0].energy<30?15:0)-(social>40?35:0):
-      bond+social/5-(group.length===3?14:0)+(world.situation==='performance'&&group.length===3?25:0)+
-      (group.every(id=>occupants.includes(id))?10:0)-(group.length===world.lastParticipants.length&&group.every(id=>world.lastParticipants.includes(id))?20:0)
-    return {group,score:score+seeded(world.seed,world.completed*37+index+41)*6}
-  }).sort((a,b)=>b.score-a.score)
-  let initialParticipants:ResidentId[]=[...ranked[0].group]
-  const mode=world.encounter??'auto'
-  if(mode==='pair'||mode==='join')initialParticipants=['mia','kai']
-  if(mode==='trio')initialParticipants=residents.map(r=>r.id)
-  if(mode==='solo')initialParticipants=['luna']
-  const candidate=world.agents.find(a=>!initialParticipants.includes(a.id)&&a.energy>25&&a.social>30)
-  const joining=mode==='join'?world.agents.find(a=>a.id==='luna'):mode==='auto'&&initialParticipants.length===2&&candidate&&(occupants.includes(candidate.id)||seeded(world.seed,world.completed*17+91)>.55)?candidate:null
-  const arrival=joining?{residentId:joining.id,beforeBeat:2}:null
-  const participants=arrival?[...initialParticipants,arrival.residentId]:initialParticipants
-  // Meeting never requires everyone to choose the same subsequent destination.
-  if(participants.length>1){
-    const candidates=destinations.map(d=>({id:d.id,loss:participants.map(id=>{const rows=scores.filter(s=>s.residentId===id);return Math.max(...rows.map(s=>s.total))-rows.find(s=>s.destinationId===d.id)!.total})})).filter(c=>c.loss.every(n=>n<=6))
-    candidates.sort((a,b)=>a.loss.reduce((s,n)=>s+n,0)-b.loss.reduce((s,n)=>s+n,0))
-    if(candidates[0])for(const id of participants)choices[id]=candidates[0].id
+  const groups = Array.from(
+    { length: (1 << residents.length) - 1 },
+    (_, mask) =>
+      residents.filter((_, i) => (mask + 1) & (1 << i)).map((r) => r.id)
+  )
+  const ranked = groups
+    .map((group, index) => {
+      const agents = group.map((id) => world.agents.find((a) => a.id === id)!)
+      const social =
+        agents.reduce((sum, a) => sum + a.social, 0) / agents.length
+      const bonds = agents.flatMap((a) =>
+        agents.filter((b) => a.id !== b.id).map((b) => a.relationships[b.id])
+      )
+      const bond = bonds.reduce((s, n) => s + n, 0) / Math.max(1, bonds.length)
+      const score =
+        group.length === 1
+          ? 45 +
+            (100 - social) * 0.25 +
+            (agents[0].energy < 30 ? 15 : 0) -
+            (social > 40 ? 35 : 0)
+          : bond +
+            social / 5 -
+            (group.length === 3 ? 14 : 0) +
+            (world.situation === "performance" && group.length === 3 ? 25 : 0) +
+            (group.every((id) => occupants.includes(id)) ? 10 : 0) -
+            (group.length === world.lastParticipants.length &&
+            group.every((id) => world.lastParticipants.includes(id))
+              ? 20
+              : 0)
+      return {
+        group,
+        score:
+          score + seeded(world.seed, world.completed * 37 + index + 41) * 6,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+  const freshSignals = signals.filter(
+    (signal) =>
+      !world.discoveries.some(
+        (discovery) => discovery.entityId === signal.entityId
+      )
+  )
+  const chosenSignal = freshSignals.toSorted(
+    (a, b) => (b.affinity ?? 0) - (a.affinity ?? 0)
+  )[0]
+  const culturalDecision = chosenSignal
+    ? (() => {
+        const agent = world.agents.find(
+          (candidate) => candidate.id === chosenSignal.residentId
+        )!
+        const destinationId =
+          chosenSignal.category === "artist" ||
+          chosenSignal.category === "podcast"
+            ? ("music" as const)
+            : chosenSignal.category === "book"
+              ? ("museum" as const)
+              : chosenSignal.category === "movie" ||
+                  chosenSignal.category === "tv_show"
+                ? ("cafe" as const)
+                : null
+        const action =
+          chosenSignal.category === "artist" ||
+          chosenSignal.category === "podcast"
+            ? ("listen" as const)
+            : chosenSignal.category === "book"
+              ? ("read" as const)
+              : chosenSignal.category === "movie" ||
+                  chosenSignal.category === "tv_show"
+                ? ("watch" as const)
+                : chosenSignal.category === "place"
+                  ? ("dining_inspiration" as const)
+                  : ("save" as const)
+        const selectedAction =
+          destinationId && agent.energy > 25 ? action : ("save" as const)
+        return {
+          residentId: chosenSignal.residentId,
+          entityId: chosenSignal.entityId,
+          entityName: chosenSignal.name,
+          category: chosenSignal.category,
+          action: selectedAction,
+          destinationId: selectedAction === "save" ? null : destinationId,
+          tasteSignalEntityIds: chosenSignal.provenance.signalEntityIds,
+          rationale: `${agent.mood} mood, current goal, recent visits, and verified cultural affinity favored ${selectedAction === "save" ? "saving this discovery" : `a ${selectedAction} activity`}.`,
+          completed: false,
+          preferenceChanged: false,
+        }
+      })()
+    : null
+  if (culturalDecision?.destinationId)
+    choices[culturalDecision.residentId] = culturalDecision.destinationId
+
+  // Scene zero is deliberately not an encounter lottery.  It is the one
+  // shared start-of-day moment, persisted by `completed` so a restored world
+  // never plays it again after it has finished.
+  const opening = world.completed === 0
+  const scheduledTrio = opening || world.completed === 2
+  const culturalInvite =
+    culturalDecision &&
+    world.completed % 3 === 0 &&
+    world.agents.find((a) => a.id === culturalDecision.residentId)!.social > 55
+  const culturalPartner = culturalInvite
+    ? residents
+        .filter((resident) => resident.id !== culturalDecision.residentId)
+        .toSorted(
+          (a, b) =>
+            world.agents.find(
+              (agent) => agent.id === culturalDecision.residentId
+            )!.relationships[b.id] -
+            world.agents.find(
+              (agent) => agent.id === culturalDecision.residentId
+            )!.relationships[a.id]
+        )[0].id
+    : null
+  const invited: ResidentId[] = scheduledTrio
+    ? residents.map((resident) => resident.id)
+    : culturalInvite
+      ? [culturalDecision.residentId, culturalPartner!]
+      : []
+  let gathering =
+    scheduledTrio || culturalInvite
+      ? {
+          id: `gathering-${world.completed + 1}`,
+          organizer: culturalInvite
+            ? culturalDecision!.residentId
+            : ("luna" as const),
+          invited,
+          responses: Object.fromEntries(invited.map((id) => [id, "accepted"])),
+          location: "square" as const,
+          scheduledDay: world.day,
+          scheduledHour: world.hour,
+          reason: opening
+            ? "The three neighbors begin their day together in the town square."
+            : culturalInvite
+            ? `${residents.find((resident) => resident.id === culturalDecision!.residentId)!.name} wants to share the verified discovery ${culturalDecision!.entityName}.`
+            : "A recurring public town-square gathering.",
+          entityId: culturalInvite ? culturalDecision!.entityId : null,
+          status: "planned" as const,
+          timeoutHour: Math.min(23, world.hour + 2),
+        }
+      : null
+  let initialParticipants: ResidentId[] = gathering
+    ? [...gathering.invited]
+    : [...ranked[0].group]
+  const mode = world.encounter ?? "auto"
+  // Developer encounter controls apply after the deterministic opening only.
+  if (!opening) {
+    if (mode !== "auto") gathering = null
+    if (mode === "pair" || mode === "join") initialParticipants = ["mia", "kai"]
+    if (mode === "trio") initialParticipants = residents.map((r) => r.id)
+    if (mode === "solo") initialParticipants = ["luna"]
   }
-  const sharedMemory=world.agents.filter(a=>participants.includes(a.id)).flatMap(a=>a.important.concat(a.memories)).filter(m=>m.kind!=='activity').at(-1)
-  const discovery=signals.find(s=>participants.includes(s.residentId)&&s.source==='LIVE Qloo')
-  const topics=[world.situation==='rain'?'Their attempt to stay dry has gone slightly wrong.':'A pigeon is behaving as though it owns the fountain.',
-    'A ridiculous little disagreement about whether humming counts as singing.',
-    'Someone has lost their train of thought; the others are no help.',
-    discovery?`A recent cultural discovery: ${discovery.name}.`:"An opinion about music or art that someone wants to take back.",
-    sharedMemory?`A callback to an actual shared experience: ${sharedMemory.text}`:'The awkward comfort of having nothing urgent to do.']
-  const topic=topics[Math.floor(seeded(world.seed,world.completed*13+209)*topics.length)]
+  const candidate = opening ? null : world.agents.find(
+    (a) => !initialParticipants.includes(a.id) && a.energy > 25 && a.social > 30
+  )
+  const joining =
+    mode === "join"
+      ? world.agents.find((a) => a.id === "luna")
+      : mode === "auto" &&
+          initialParticipants.length === 2 &&
+          candidate &&
+          (occupants.includes(candidate.id) ||
+            seeded(world.seed, world.completed * 17 + 91) > 0.55)
+        ? candidate
+        : null
+  const arrival = joining ? { residentId: joining.id, beforeBeat: 2 } : null
+  const participants = arrival
+    ? [...initialParticipants, arrival.residentId]
+    : initialParticipants
+  // Meeting never requires everyone to choose the same subsequent destination.
+  if (participants.length > 1) {
+    const candidates = destinations
+      .map((d) => ({
+        id: d.id,
+        loss: participants.map((id) => {
+          const rows = scores.filter((s) => s.residentId === id)
+          return (
+            Math.max(...rows.map((s) => s.total)) -
+            rows.find((s) => s.destinationId === d.id)!.total
+          )
+        }),
+      }))
+      .filter((c) => c.loss.every((n) => n <= 6))
+    candidates.sort(
+      (a, b) =>
+        a.loss.reduce((s, n) => s + n, 0) - b.loss.reduce((s, n) => s + n, 0)
+    )
+    if (candidates[0])
+      for (const id of participants) choices[id] = candidates[0].id
+  }
+  // Angles describe current, observable circumstances, never fabricated past events.
+  const topics = [
+    ...(culturalDecision
+      ? [
+          `${residents.find((resident) => resident.id === culturalDecision.residentId)!.name} considers sharing the verified discovery ${culturalDecision.entityName}.`,
+        ]
+      : []),
+    "Compare what each person wants from the rest of the day.",
+    "Notice the fountain and offer a different way of looking at it.",
+    "Ask a neighbor about one of their established cultural interests.",
+    "Decide whether to linger in the square or head off independently.",
+    "Discuss the current weather and how it affects today's plans.",
+    "Offer a small creative challenge to try now, without claiming it already happened.",
+    "Ask what makes a place inviting, drawing on actual recent visits if available.",
+    "Share a current mood and respond to a neighbor's different energy level.",
+  ]
+  const exhausted = new Set((world.recentScenes ?? []).map((s) => s.topic))
+  const available = topics.filter((t) => !exhausted.has(t))
+  const topic =
+    available[
+      Math.floor(
+        seeded(world.seed, world.completed * 13 + 209) * available.length
+      )
+    ]
   const groundedIncident =
     incident &&
     ((incident.destination &&
@@ -268,15 +459,33 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
       (!incident.destination && !participants.includes(incident.actor)))
       ? null
       : incident
+  const sceneType =
+    participants.length === 1
+      ? ("personal_moment" as const)
+      : opening
+        ? ("group_hangout" as const)
+      : gathering && participants.length === 3
+        ? ("group_hangout" as const)
+        : culturalDecision && participants.includes(culturalDecision.residentId)
+          ? ("discovery" as const)
+          : groundedIncident
+            ? ("unexpected_event" as const)
+            : seeded(world.seed, world.completed * 11 + 17) > 0.82
+              ? ("disagreement" as const)
+              : ("casual_encounter" as const)
   return {
     number: world.completed + 1,
     participants,
     destinations: choices,
     scores,
     incident: groundedIncident,
-    initialParticipants, arrival, topic,
-    summary: `${initialParticipants.map(id=>residents.find(r=>r.id===id)!.name).join(' and ')} ${initialParticipants.length===1?'takes a quiet moment':'cross paths'} in the square.${arrival?` ${residents.find(r=>r.id===arrival.residentId)!.name} is on the way.`:''}`,
-
+    initialParticipants,
+    arrival,
+    topic,
+    summary: `${initialParticipants.map((id) => residents.find((r) => r.id === id)!.name).join(" and ")} ${initialParticipants.length === 1 ? "takes a quiet moment" : "cross paths"} in the square.${arrival ? ` ${residents.find((r) => r.id === arrival.residentId)!.name} is on the way.` : ""}`,
+    sceneType,
+    gathering,
+    culturalDecision,
   }
 }
 export function nextGoal(a: Agent) {

@@ -345,7 +345,7 @@ h1 > span {
   align-items: center;
   gap: 5px;
 }
-.mock-pill {
+.provider-pill {
   font: 8px monospace;
   letter-spacing: 1px;
   background: #eeefe5;
@@ -1067,7 +1067,7 @@ footer > span:last-child {
     max-width: 48%;
     line-height: 1.6;
   }
-  .mock-pill {
+  .provider-pill {
     font-size: 7px;
     padding: 4px;
   }

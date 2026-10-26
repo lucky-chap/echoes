@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { residents, type ResidentId, type DestinationId } from "../profiles"
+import { compactMetadata } from "./metadata"
 import {
+  encounterModes,
   actions,
   emotions,
   type Memory,
@@ -30,6 +32,12 @@ function cleanMemory(m: Memory): Memory {
 }
 export function validateSnapshot(value: unknown): Snapshot {
   if (
+    object(value) &&
+    value.encounter !== undefined &&
+    !encounterModes.includes(value.encounter as never)
+  )
+    throw Error("Invalid encounter mode")
+  if (
     !object(value) ||
     value.version !== 1 ||
     !Number.isInteger(value.seed) ||
@@ -57,7 +65,8 @@ export function validateSnapshot(value: unknown): Snapshot {
       !finite(a.hunger, 0, 100) ||
       !finite(a.social, 0, 100) ||
       !text(a.goal, 150) ||
-      !["square", ...locations].includes(String(a.location))
+      !text(a.currentActivity, 160) ||
+      !["square", "path", ...locations].includes(String(a.location))
     )
       throw Error("Invalid resident state")
     if (typeof a.memorySummary !== "string" || a.memorySummary.length > 320)
@@ -144,10 +153,171 @@ export function validateSnapshot(value: unknown): Snapshot {
     !value.lastParticipants.every((id) => ids.includes(String(id)))
   )
     throw Error("Invalid participants")
+  const recentScenes = z
+    .array(
+      z.strictObject({
+        sceneId: z.string().min(1).max(80),
+        topic: z.string().min(1).max(300),
+        lines: z
+          .array(
+            z.strictObject({
+              speaker: z.enum(["mia", "kai", "luna"]),
+              text: z.string().min(1).max(220),
+            })
+          )
+          .min(2)
+          .max(8),
+      })
+    )
+    .max(4)
+    .parse(value.recentScenes ?? [])
+  const qlooType = z.enum([
+    "urn:entity:artist",
+    "urn:entity:book",
+    "urn:entity:movie",
+    "urn:entity:place",
+    "urn:entity:tv_show",
+    "urn:entity:podcast",
+  ])
+  const verifiedInterest = z.strictObject({
+    entityId: z.string().min(4).max(120),
+    name: z.string().min(1).max(240),
+    type: qlooType,
+    initial: z.boolean(),
+    weight: z.number().finite().min(0).max(1),
+    verifiedAt: z.string().min(1).max(40),
+  })
+  const tasteProfiles = z
+    .array(
+      z.strictObject({
+        residentId: z.enum(["mia", "kai", "luna"]),
+        configuredInterests: z
+          .array(
+            z.strictObject({
+              name: z.string().min(1).max(120),
+              type: qlooType,
+              weight: z.number().finite().min(0).max(1),
+            })
+          )
+          .max(8),
+        verifiedInterests: z.array(verifiedInterest).max(16),
+        preferenceChanges: z
+          .array(
+            z.strictObject({
+              entityId: z.string().min(4).max(120),
+              delta: z.number().finite().min(-1).max(1),
+              reason: z.string().min(1).max(240),
+              day: z.number().int().min(1).max(10000),
+              scene: z.number().int().min(0).max(10000),
+            })
+          )
+          .max(12),
+        lastUpdated: z.string().min(1).max(40).nullable(),
+      })
+    )
+    .length(3)
+    .refine((profiles) => new Set(profiles.map((p) => p.residentId)).size === 3)
+    .parse(value.tasteProfiles)
+  const provenance = z.strictObject({
+    provider: z.literal("Qloo"),
+    endpoint: z.literal("/v2/insights"),
+    requestedAt: z.string().min(1).max(40),
+    requestCategory: qlooType,
+    signalEntityIds: z.array(z.string().min(4).max(120)).max(8),
+    excludedEntityIds: z.array(z.string().min(4).max(120)).max(20),
+    delivery: z.enum(["live", "cache"]),
+  })
+  const discoveries = z
+    .array(
+      z
+        .strictObject({
+          entityId: z.string().min(4).max(120),
+          name: z.string().min(1).max(240),
+          type: qlooType,
+          description: z.string().max(1000).nullable(),
+          residentId: z.enum(["mia", "kai", "luna"]),
+          discoveredAt: z.string().min(1).max(40),
+          day: z.number().int().min(1).max(10000),
+          scene: z.number().int().min(0).max(10000),
+          status: z.enum([
+            "discovered",
+            "considered",
+            "experienced",
+            "liked",
+            "disliked",
+            "dismissed",
+          ]),
+          affinity: z.number().finite().nullable(),
+          properties: z.record(z.string(), z.unknown()),
+          explainability: z.record(z.string(), z.unknown()).nullable(),
+          provenance,
+          reaction: z.string().max(240).nullable(),
+        })
+        .transform((item) => ({
+          ...item,
+          properties: compactMetadata(item.properties),
+          explainability: item.explainability
+            ? compactMetadata(item.explainability)
+            : null,
+        }))
+    )
+    .max(30)
+    .parse(value.discoveries)
+  const socialMemories = z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(80),
+        participants: z
+          .array(z.enum(["mia", "kai", "luna"]))
+          .min(1)
+          .max(3),
+        sceneId: z.string().min(1).max(80),
+        location: z.enum(["square", "cafe", "music", "museum"]),
+        summary: z.string().min(1).max(240),
+        day: z.number().int().min(1).max(10000),
+        hour: z.number().min(0).max(23),
+        referencedEntityIds: z.array(z.string().min(4).max(120)).max(6),
+        confirmedOutcome: z.string().min(1).max(240),
+      })
+    )
+    .max(12)
+    .parse(value.socialMemories)
+  const gatherings = z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(80),
+        organizer: z.enum(["mia", "kai", "luna"]),
+        invited: z
+          .array(z.enum(["mia", "kai", "luna"]))
+          .min(1)
+          .max(3),
+        responses: z.partialRecord(
+          z.enum(["mia", "kai", "luna"]),
+          z.enum(["pending", "accepted", "declined"])
+        ),
+        location: z.literal("square"),
+        scheduledDay: z.number().int().min(1).max(10000),
+        scheduledHour: z.number().min(0).max(23),
+        reason: z.string().min(1).max(300),
+        entityId: z.string().min(4).max(120).nullable(),
+        status: z.enum([
+          "planned",
+          "traveling",
+          "active",
+          "completed",
+          "cancelled",
+        ]),
+        timeoutHour: z.number().min(0).max(23),
+      })
+    )
+    .max(8)
+    .parse(value.gatherings)
   // Normalize to stable resident order. Extra untrusted fields never reach a prompt.
   const world = value as unknown as Snapshot
   return {
     version: 1,
+    recentScenes,
+    encounter: world.encounter ?? "auto",
     seed: world.seed,
     completed: world.completed,
     day: world.day,
@@ -162,6 +332,7 @@ export function validateSnapshot(value: unknown): Snapshot {
         hunger: a.hunger,
         social: a.social,
         goal: a.goal,
+        currentActivity: a.currentActivity,
         location: a.location,
         recentVisits: a.recentVisits,
         memorySummary: a.memorySummary,
@@ -183,6 +354,10 @@ export function validateSnapshot(value: unknown): Snapshot {
     events: world.events,
     incidents: world.incidents,
     lastParticipants: world.lastParticipants,
+    tasteProfiles: tasteProfiles as Snapshot["tasteProfiles"],
+    discoveries: discoveries as Snapshot["discoveries"],
+    socialMemories,
+    gatherings: gatherings as Snapshot["gatherings"],
   }
 }
 export function validateScene(value: unknown, plan: Plan): Scene {
@@ -193,16 +368,48 @@ export function validateScene(value: unknown, plan: Plan): Scene {
     !text(value.sceneId, 80) ||
     !Array.isArray(value.participants) ||
     value.participants.join(",") !== plan.participants.join(",") ||
-    !["social_encounter", "shared_activity", "change_of_plans"].includes(
-      String(value.sceneType)
-    ) ||
+    ![
+      "casual_encounter",
+      "group_hangout",
+      "disagreement",
+      "discovery",
+      "unexpected_event",
+      "personal_moment",
+    ].includes(String(value.sceneType)) ||
     !text(value.summary, 180) ||
     !Array.isArray(value.beats) ||
-    value.beats.length < 4 ||
+    value.beats.length < (plan.participants.length === 1 ? 2 : 4) ||
     value.beats.length > 8
   )
     throw Error("Invalid scene structure")
-  for (const b of value.beats) {
+  const present = new Set(plan.initialParticipants)
+  const attendance: Set<ResidentId>[] = []
+  for (const [index, b] of value.beats.entries()) {
+    if (plan.arrival && index === plan.arrival.beforeBeat)
+      present.add(plan.arrival.residentId)
+    attendance.push(new Set(present))
+    if (
+      (index === 0 && b.replyTo !== null) ||
+      (index > 0 &&
+        (!Number.isInteger(b.replyTo) || b.replyTo < 0 || b.replyTo >= index))
+    )
+      throw Error("Scene continuity requires a preceding reply target")
+    if (
+      index > 0 &&
+      !attendance[b.replyTo as number]?.has(b.speaker as ResidentId)
+    )
+      throw Error(
+        "Resident cannot reply to a statement made before they arrived"
+      )
+    if (
+      plan.arrival &&
+      index === plan.arrival.beforeBeat &&
+      (b.speaker === plan.arrival.residentId ||
+        !new RegExp(`\\b${plan.arrival.residentId}\\b`, "i").test(b.dialogue))
+    )
+      throw Error("Arrival must be acknowledged by a present resident")
+    if (!present.has(b.speaker as ResidentId))
+      throw Error("Absent resident cannot speak")
     if (
       !object(b) ||
       !plan.participants.includes(b.speaker as ResidentId) ||
@@ -222,8 +429,7 @@ export function validateScene(value: unknown, plan: Plan): Scene {
       !locations.includes(String(b.targetLocation))
     )
       throw Error("Unknown destination")
-    if (b.action === "walk_to" && b !== value.beats.at(-1))
-      throw Error("Travel must follow the final dialogue beat")
+    if (b.action === "walk_to") present.delete(b.speaker as ResidentId)
     if (
       b.action === "walk_to" &&
       b.targetLocation !== plan.destinations[b.speaker as ResidentId]
@@ -256,7 +462,7 @@ export function validateScene(value: unknown, plan: Plan): Scene {
       !object(m) ||
       !Number.isInteger(m.beatIndex) ||
       !finite(m.beatIndex, 0, value.beats.length - 1) ||
-      !plan.participants.includes(m.residentId as ResidentId) ||
+      !attendance[m.beatIndex as number]?.has(m.residentId as ResidentId) ||
       (m.kind === "promise" &&
         value.beats[m.beatIndex as number].speaker !== m.residentId) ||
       !["conversation", "promise", "discovery"].includes(String(m.kind))
@@ -275,8 +481,8 @@ export function validateScene(value: unknown, plan: Plan): Scene {
       !object(r) ||
       !Number.isInteger(r.beatIndex) ||
       !finite(r.beatIndex, 0, value.beats.length - 1) ||
-      !plan.participants.includes(r.from as ResidentId) ||
-      !plan.participants.includes(r.to as ResidentId) ||
+      !attendance[r.beatIndex as number]?.has(r.from as ResidentId) ||
+      !attendance[r.beatIndex as number]?.has(r.to as ResidentId) ||
       r.from === r.to ||
       !Number.isInteger(r.delta) ||
       !finite(r.delta, -2, 2)
@@ -286,15 +492,36 @@ export function validateScene(value: unknown, plan: Plan): Scene {
 }
 const residentSchema = z.enum(["mia", "kai", "luna"])
 const locationSchema = z.enum(["cafe", "music", "museum"])
+const memoryUpdateSchema = z.strictObject({
+  residentId: residentSchema,
+  beatIndex: z.number().int().min(0).max(7),
+  kind: z.enum(["conversation", "promise", "discovery"]),
+})
+const relationshipChangeSchema = z.strictObject({
+  from: residentSchema,
+  to: residentSchema,
+  beatIndex: z.number().int().min(0).max(7),
+  delta: z.number().int().min(-2).max(2),
+})
 const sceneValidator = z.strictObject({
+  ending: z.enum(["closure", "interruption", "transition"]),
   sceneId: z.string().min(1).max(80),
   participants: z.array(residentSchema).min(1).max(3),
-  sceneType: z.enum(["social_encounter", "shared_activity", "change_of_plans"]),
+  sceneType: z.enum([
+    "casual_encounter",
+    "group_hangout",
+    "disagreement",
+    "discovery",
+    "unexpected_event",
+    "personal_moment",
+  ]),
   summary: z.string().min(1).max(180),
   beats: z
     .array(
       z.union([
         z.strictObject({
+          replyTo: z.number().int().min(0).max(7).nullable(),
+          references: z.array(z.string().min(1).max(100)).max(3),
           speaker: residentSchema,
           dialogue: z.string().min(1).max(220),
           emotion: z.enum(emotions),
@@ -308,10 +535,13 @@ const sceneValidator = z.strictObject({
             "sketch",
             "dance",
             "react",
+            "walk_to",
           ]),
           targetLocation: z.null(),
         }),
         z.strictObject({
+          replyTo: z.number().int().min(0).max(7).nullable(),
+          references: z.array(z.string().min(1).max(100)).max(3),
           speaker: residentSchema,
           dialogue: z.string().min(1).max(220),
           emotion: z.enum(emotions),
@@ -320,27 +550,10 @@ const sceneValidator = z.strictObject({
         }),
       ])
     )
-    .min(4)
+    .min(2)
     .max(8),
-  suggestedMemoryUpdates: z
-    .array(
-      z.strictObject({
-        residentId: residentSchema,
-        beatIndex: z.number().int().min(0).max(7),
-        kind: z.enum(["conversation", "promise", "discovery"]),
-      })
-    )
-    .max(3),
-  suggestedRelationshipChanges: z
-    .array(
-      z.strictObject({
-        from: residentSchema,
-        to: residentSchema,
-        beatIndex: z.number().int().min(0).max(7),
-        delta: z.number().int().min(-2).max(2),
-      })
-    )
-    .max(2),
+  suggestedMemoryUpdates: z.array(memoryUpdateSchema).max(3),
+  suggestedRelationshipChanges: z.array(relationshipChangeSchema).max(2),
 })
 // Groq generates the square encounter's expressive actions. Travel remains an
 // engine transition after dialogue. Keeping this schema flat avoids Groq's
@@ -350,6 +563,8 @@ export const sceneSchema = z.toJSONSchema(
     beats: z
       .array(
         z.strictObject({
+          replyTo: z.number().int().min(0).max(7).nullable(),
+          references: z.array(z.string().min(1).max(100)).max(3),
           speaker: residentSchema,
           dialogue: z.string().min(1).max(220),
           emotion: z.enum(emotions),
@@ -367,8 +582,12 @@ export const sceneSchema = z.toJSONSchema(
           targetLocation: z.null(),
         })
       )
-      .min(4)
+      .min(2)
       .max(8),
+    // Groq's constrained decoder does not reliably enforce maxItems here.
+    // The server normalizes these advisory fields to [] before validation.
+    suggestedMemoryUpdates: z.array(memoryUpdateSchema),
+    suggestedRelationshipChanges: z.array(relationshipChangeSchema),
   })
 )
 export const isDestination = (value: unknown): value is DestinationId =>

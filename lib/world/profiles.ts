@@ -20,6 +20,15 @@ export const residents = [
     goal: "Find a comfortable place to connect",
     interests: ["Coffee", "Indie films"],
     culture: ["independent cinema", "acoustic folk", "neighborhood cafés"],
+    qlooSeeds: [
+      {
+        name: "Before Sunrise",
+        type: "urn:entity:movie" as const,
+        weight: 0.9,
+      },
+      { name: "Norah Jones", type: "urn:entity:artist" as const, weight: 0.75 },
+    ],
+    discoveryType: "urn:entity:movie" as const,
     color: "#b96749",
     start: [140, 144] as Point,
     end: [229, 206] as Point,
@@ -40,6 +49,15 @@ export const residents = [
     goal: "Discover something lively with friends",
     interests: ["Live music", "Good company"],
     culture: ["hip-hop", "indie pop", "live performance"],
+    qlooSeeds: [
+      { name: "Kendrick Lamar", type: "urn:entity:artist" as const, weight: 1 },
+      {
+        name: "Spider-Man: Into the Spider-Verse",
+        type: "urn:entity:movie" as const,
+        weight: 0.7,
+      },
+    ],
+    discoveryType: "urn:entity:artist" as const,
     color: "#507b68",
     start: [363, 141] as Point,
     end: [251, 211] as Point,
@@ -60,6 +78,15 @@ export const residents = [
     goal: "Find inspiration without too much bustle",
     interests: ["Art", "Quiet places"],
     culture: ["watercolor art", "jazz", "local history"],
+    qlooSeeds: [
+      { name: "Miles Davis", type: "urn:entity:artist" as const, weight: 0.8 },
+      {
+        name: "The Little Prince",
+        type: "urn:entity:book" as const,
+        weight: 1,
+      },
+    ],
+    discoveryType: "urn:entity:book" as const,
     color: "#84749b",
     start: [347, 264] as Point,
     end: [238, 227] as Point,

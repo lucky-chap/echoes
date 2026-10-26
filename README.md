@@ -1,62 +1,66 @@
 # Worldlings — Littlehaven
 
-A living pixel-art village in the existing Next.js app. Mia, Kai, and Luna keep their original sprites, paths, town artwork, procedural soundtrack and individual speaking sounds.
+Littlehaven is a persistent pixel-art town simulation for Mia, Kai, and Luna. Qloo supplies verified cultural entities and recommendations, the simulation owns decisions and world state, and Groq supplies dialogue only when a generated scene passes structural and grounding checks.
 
 ## Run
 
 ```sh
 npm install
-cp .env.example .env.local # only for a new setup; preserve an existing key
+cp .env.example .env.local # only on a new setup; never overwrite existing keys
 npm run dev
 ```
 
-Start Event plays three connected scenes and pauses at a checkpoint. Continue plays another three. Next Event plays one scene. Pause, speed (1×/2×/4×), Reset World, separate music/SFX controls, and tab-visibility suspension are supported. Reset clears the village’s memories, not the server’s usage ledger. Memory persists within the page session, not across refreshes.
+Configure the server-only integrations in `.env.local`:
 
-Residents meet in pairs while another pursues an independent activity. Morning, afternoon and evening lead into the next day. Clicking a resident reveals moods, recent memories, important promises/discoveries and friendships. Cultural evidence and numerical decision factors live in expandable diagnostics, never character speech.
+```env
+QLOO_API_KEY=your_actual_key_here
+QLOO_BASE_URL=https://hackathon.api.qloo.com
+QLOO_TIMEOUT_MS=7000
 
-## GroqCloud Free Plan
-
-The only live LLM adapter is the official `groq-sdk`, with `openai/gpt-oss-120b`. No Google, Vertex, Gemini or xAI account is needed. No billing, credit purchases, plan upgrades or paid-provider switching are implemented.
-
-Get a key from https://console.groq.com/keys and confirm the account is on the **Free Plan**. Set the server-only variables documented in `.env.example`. `GROQ_FREE_PLAN_CONFIRMED=true` is an operator assertion, not an API billing-tier check; a successful generation alone cannot prove an account’s billing tier. Configure request/token ceilings below the available account limits, including usage by other applications. Groq’s own Free Plan limits remain authoritative.
-
-```sh
-node scripts/verify-groq.mjs
+GROQ_API_KEY=your_groq_key_here
+GROQ_MODEL=openai/gpt-oss-20b
 ```
 
-Run this against the dev server (`WORLDLINGS_URL` defaults to `http://localhost:3000`). It makes a single scene request through the same validation and quota path used by the village. A transient server error may use the one permitted retry. It reports Groq Live only for an actual validated scene. Errors and offline scenes remain labeled Groq Mock / Mock Fallback. `.env.local` is ignored by Git.
+`QLOO_API_KEY` is read only by server code. The client calls the same-origin Worldlings route and never receives the key, raw headers, or upstream request credentials. The Qloo client refuses every origin except `https://hackathon.api.qloo.com`.
 
-Scenes use one request for all dialogue beats, strict JSON Schema output, and a second Zod/semantic validation pass. Prompts include profiles, moods, goals, current locations, bounded conversation context, relevant memories, relationships, cultural evidence, engine-selected plans and allowed actions. The engine owns destinations and movement. Invalid or ungrounded output falls back safely. The live generation schema limits the square encounter to expressive emotes, with travel executed afterward by the planner. Runtime validation also supports targeted actions: pointing requires a valid destination and walking is allowed only on the final beat to the engine-approved location. Emotes, bubbles, speaker-specific sounds and movement follow the playback clock. Memories and relationship changes apply after their referenced beats; activities and incidents commit after arrival.
+## Cultural loop
 
-### Bounded usage and deployment
+Each resident starts with different configured interests:
 
-- Default maximum: 10 live attempts per server-issued session, including retries. Automatic playback stops after three scenes; continuation requires a click.
-- Daily request and conservative token reservations, minute ceilings, minimum spacing, 18-second request timeout and at most one transient 5xx retry. Authentication/429 errors pause live generation for that session. Token usage is recorded; account remaining-token/request headers constrain later reservations.
-- Quota reservations happen **before** network I/O and persist in `.worldlings/quota.json`, protected by an atomic filesystem lock. New cookies, reset and refreshed browsers do not reset global ceilings. At most 100 sessions can be issued per UTC day.
-- API requests require the same origin, bounded bodies and validated state. Credentials never reach the browser.
-- Production live mode fails closed unless `WORLDLINGS_SINGLE_INSTANCE=true` and `WORLDLINGS_QUOTA_DIR` points to a persistent writable directory on a **single server**. Do not opt in on ephemeral/serverless or multiple independent instances. Those deployments run the mock simulation until an atomic shared quota backend is implemented. No paid infrastructure is required.
-- A crashed process can leave the lock directory behind. It intentionally blocks live calls; after verifying no request is active, remove the stale `quota.lock` directory, preserving `quota.json`. Never delete the ledger to bypass the daily ceiling.
+- Mia: *Before Sunrise* and Norah Jones; discovers films.
+- Kai: Kendrick Lamar and *Spider-Man: Into the Spider-Verse*; discovers artists.
+- Luna: Miles Davis and *The Little Prince*; discovers books.
 
-API docs checked: [Groq structured output](https://console.groq.com/docs/structured-outputs), [account-specific rate limits](https://console.groq.com/docs/rate-limits). The SDK disables implicit retries so every attempted request must obtain a reservation.
+On the first request, `/search` resolves those names to actual Qloo entity IDs. `/v2/insights` then uses each resident's own verified IDs, exclusions, result type, and optional explainability. Search results are cached for 24 hours and Insights results for one hour; expired real data can be used for one additional day during an outage and is explicitly labeled `CACHED Qloo`. Authentication, rate-limit, timeout, schema, and empty-result failures are exposed. There is no production mock recommendation provider or silent fake fallback.
 
-## Cultural evidence and destinations
+The decision loop is:
 
-The old Museum bias came from fixed taste-only scores and always selecting one group compromise. The living planner considers mood, energy, hunger/current goals, relationships, recent experiences, visit penalties, novelty, weather/events and small seeded variation. Residents select individually; a pair compromises only within a small loss window. There is no destination rotation or hard-coded winner.
+1. Resolve and store verified Qloo interests.
+2. Fetch a small personalized recommendation batch when a scene needs cultural input.
+3. Evaluate a new entity against mood, goal, energy, visits, social context, and available Littlehaven activities. Qloo affinity is preserved as upstream evidence and passed through a bounded simulation influence; it is not interpreted as a probability.
+4. Listen at The Green Room, read at the Museum, arrange a movie activity at The Daily Cup, or save an unsupported entity. A real place remains a referenced real place and is never represented as a building in Littlehaven.
+5. Record `discovered`, `considered`, `liked`, `disliked`, or `dismissed` independently.
+6. Add only liked, experienced entities to eligible future Qloo signals. Preserve Qloo's original score and record simulation preference changes separately.
 
-`TasteProvider` is separate from `LLMProvider`. Qloo defaults to Mock while the key is pending. Mock cultural signals are explicitly illustrative and have **no fabricated affinity numbers**. To enable Qloo later, set `QLOO_MODE=live`, `QLOO_API_KEY`, and real cultural seed entity IDs for each resident using the variables in `.env.example`. The adapter queries artist recommendations through Qloo Insights, validates actual entities/affinities, caches successful results, and falls back on errors. It never looks up fictional village buildings. Real evidence affects local cultural-fit factors, dialogue context, discoveries and subsequently learned interests. Qloo Live appears only after successful real responses; this adapter has not yet been verified with a Qloo key.
+Memory, discoveries, taste changes, social memories, relationships, and completed gatherings survive refreshes in validated local storage. Data sent back to the server is size-bounded and validated before it can enter a prompt.
 
-## Modules
+## Gatherings and dialogue
 
-- `lib/world/living/planner.ts`: individual scoring, encounters, contextual incidents.
-- `lib/world/living/engine.ts`: playback, movement, clock, bounded memories and relationships.
-- `lib/world/living/validation.ts`: strict output schema and semantic validation.
-- `lib/world/living/mock.ts`: replaceable offline scene provider.
-- `lib/world/server/`: Groq, Qloo and durable server quota adapters.
-- `app/api/world/`: same-origin scene/session routes.
-- `components/world/use-world.ts`: bounded autoplay, fetch lifecycle, audio and controls.
-- `lib/world/art.ts`, `movement.ts`, `audio/`: preserved town, paths and sound systems.
+Gatherings include an organizer, invitations and responses, a square location, scheduled simulation time, timeout, reason, optional Qloo entity, and lifecycle state. Residents walk over existing routes. The engine checks physical square occupancy before every line; absent residents cannot speak or receive social-memory updates. A compatible late arrival can join only after reaching the square.
 
-The original single-event engine remains for regression coverage; the UI now uses the living engine. Offline dialogue is templated and labeled honestly, while live Groq dialogue is generated from actual scene context.
+Natural scheduling considers social need, relationships, energy, prior participants, physical overlap, cultural discoveries, and public events. A reliable all-three public gathering is scheduled by the third scene on day one, using the same invitation, walking, arrival, occupancy, and dialogue path as every other gathering. Independent destination choices continue after the meeting.
+
+The scene director supports casual encounters, group hangouts, disagreements, discovery scenes, unexpected events, and personal moments. Groq receives the exact roster, arrival boundary, moods, current goals, relationships, bounded relevant memories, real Qloo discoveries, and confirmed-fact IDs. It cannot authorize movement or directly mutate world state. Output is rejected for absent speakers, invalid actions, ungrounded callbacks, unknown evidence, repeated lines/sequences, bad attribution, or unsupported state changes. An outage produces a silent fallback while independent activities continue.
+
+## Development diagnostics
+
+Expand **Cultural signals & developer inspection** to inspect:
+
+- Qloo configuration, fixed host, last authenticated success, request categories, cache state, last error, live/cached request counts, real recommendation count, entity IDs, sources, and unmodified affinities.
+- The latest Qloo-driven resident decision, input entity IDs, simulation rationale, action, completion, and preference update.
+- Groq source, model, status, attempts, token use, validation result, scene roster, actual square occupants, movements, gatherings, and destination score factors.
+
+No secrets or upstream authentication headers are included.
 
 ## Verification
 
@@ -64,22 +68,52 @@ The original single-event engine remains for regression coverage; the UI now use
 npm test
 npm run typecheck
 npm run lint
-npm run build -- --webpack
+npm run build
+node scripts/verify-qloo.mjs
 ```
 
-The regression suite covers the original renderer/audio plus multi-day scenes, independent routes, bounded memories, promise retention, invalid actions, memory commit timing, evidence-sensitive scoring and durable quota enforcement. Browser checks use an existing Playwright/Chromium installation:
+The Qloo verifier makes one authenticated search and one personalized Insights request for each resident, validates entity IDs and names, and prints counts and non-secret evidence. On 2026-10-25 it completed 6 live requests against the hackathon host: 3 searches and 3 Insights requests. Mia received films (*Before Sunset*, *Before Midnight*, *Eternal Sunshine of the Spotless Mind*), Kai received artists (Tyler, the Creator; A$AP Rocky; ScHoolboy Q), and Luna received books (*Witch of the Glens*, *Animal Farm*, *The Metamorphosis*).
+
+Run the Groq endpoint verifier against a running server:
 
 ```sh
-WORLDLINGS_URL=http://localhost:3001 \
+node scripts/verify-groq.mjs
+```
+
+Browser checks can use an existing Playwright/Chromium installation:
+
+```sh
+WORLDLINGS_URL=http://localhost:3000 \
 WORLDLINGS_PLAYWRIGHT_PATH=/path/to/playwright \
 WORLDLINGS_BROWSER_PATH=/path/to/chromium \
 node tests/living-browser.cjs
 ```
 
-Run that test against a production server with default production live safeguards (mock mode). It checks connected scenes, pause, speed, checkpoints, rollover, memories, audio controls, mobile overflow, reset and API validation. Screenshots go to `/tmp/worldlings-living-{desktop,mobile}.png`.
+The automated suite uses isolated fake transports for API error/schema contracts and test-only authored dialogue fixtures. These do not count as live Qloo or Groq success. Live verification is reported separately.
 
-Backlog: diaries, relationship timelines, knowledge-graph visualization, richer memory retrieval and cross-refresh persistence. No graph database is needed for this version.
+## Root causes fixed
 
-## Live verification status (2026-10-24)
+The social failure came from a planner limited to fixed pairs, a dialogue fallback that destructured two residents, and movement code that sent non-selected residents away before speech. There was no authoritative attendance or arrival boundary. The current planner evaluates every resident subset, the engine maintains active presence and per-resident transit, and validation ties every utterance and state update to physical attendance.
 
-The account owner confirmed the Free Plan and 30 RPM. Real requests authenticated and reached `openai/gpt-oss-120b`, but a fully accepted live scene was **not** verified. Tests exposed Groq strict-schema compiler/validation errors; the latest live error was HTTP 400 `json_validate_failed` for an emotion outside the allowed enum. The schema and prompt were simplified/tightened afterward. Further live verification is blocked by the conservative daily token reservation ceiling (which was preserved). The interface remains Groq Mock until an actual validated request succeeds. Re-run `scripts/verify-groq.mjs` after the daily budget resets. Qloo remains Mock while its key is pending.
+The repetitive dialogue came from a production fallback line bank rotated by scene number, not from a dialogue cache. Both the API and browser error path invoked it, and callbacks could misattribute stored memories. That template system and the obsolete score-based demo engine were deleted. Fallback is now silent; accepted Groq scenes use bounded history, reply links, grounded evidence, participant validation, and exact/near/sequence repetition detection.
+
+The cultural failure came from requiring manually invented environment IDs and replacing every error with illustrative `mockSignals`. The new client resolves actual IDs, validates and normalizes live schemas, maintains provenance, and returns an explicit unavailable/error state when it has no cached real response.
+
+## Main modules
+
+- `lib/world/server/qloo.ts` — fixed-host client, search, Insights, schema validation, retry, throttling, deduplication, caching, normalization, and profile initialization.
+- `lib/world/living/planner.ts` — local decisions, cultural activity mapping, social intents, invitations, group scheduling, and scene selection.
+- `lib/world/living/engine.ts` — movement, attendance, dialogue playback, outcomes, discoveries, memories, relationships, and feedback.
+- `lib/world/living/validation.ts` — bounded snapshot validation and strict scene semantics.
+- `lib/world/server/groq.ts` — contextual structured dialogue generation.
+- `app/api/world/scene/route.ts` — same-origin server orchestration; credentials remain server-side.
+- `components/world/use-world.ts` — playback lifecycle and validated persistence.
+
+Official contracts reviewed: [Qloo entity search](https://github.com/qloo/docs-public/blob/main/reference/get-search.md), [Qloo Insights](https://github.com/qloo/docs-public/blob/main/reference/insights-api-deep-dive.md), and [Qloo authentication](https://github.com/qloo/docs-public/blob/main/reference/api-onboarding.md).
+
+## Known limits
+
+- Memory is persistent per browser, not synchronized across devices or accounts.
+- There is no vector database or interactive connections graph.
+- Qloo entity coverage and explainability vary by result; missing explainability remains `null` and is never invented.
+- Live Groq prose quality still depends on model availability and quota. Rejected or unavailable output never blocks walking or independent routines.

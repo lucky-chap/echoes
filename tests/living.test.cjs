@@ -9,10 +9,12 @@ const output = mkdtempSync(join(process.cwd(), ".living-test-"))
 const program = ts.createProgram(
   [
     "lib/world/living/engine.ts",
-    "lib/world/living/mock.ts",
+    "lib/world/living/fallback.ts",
+    "lib/world/server/qloo.ts",
     "lib/world/server/quota.ts",
     "lib/world/server/groq.ts",
     "lib/world/server/origin.ts",
+    "lib/world/server/generation.ts",
   ],
   {
     outDir: output,
@@ -40,7 +42,7 @@ after(() => rmSync(output, { recursive: true, force: true }))
 const { newWorld, planScene, scoreDestinations } = require(
   join(output, "living/planner.js")
 )
-const { MockLLMProvider, mockSignals } = require(join(output, "living/mock.js"))
+const { quietScene } = require(join(output, "living/fallback.js"))
 const { validateScene, validateSnapshot, sceneSchema } = require(
   join(output, "living/validation.js")
 )
@@ -49,19 +51,58 @@ const { idleLiving, beginLiving, advanceLiving } = require(
 )
 const { routeToDestination } = require(join(output, "movement.js"))
 const quota = require(join(output, "server/quota.js"))
+const { sceneFixture } = require("./scene-fixture.cjs")
+const mockSignals = [
+  ["mia", "Test Film", "movie", "mia-film"],
+  ["kai", "Test Artist", "artist", "kai-artist"],
+  ["luna", "Test Book", "book", "luna-book"],
+].map(([residentId, name, category, entityId]) => ({
+  residentId,
+  name,
+  category,
+  entityId,
+  affinity: 0.7,
+  description: null,
+  properties: {},
+  explainability: null,
+  source: "CACHED Qloo",
+  provenance: {
+    provider: "Qloo",
+    endpoint: "/v2/insights",
+    requestedAt: "2026-10-25T00:00:00.000Z",
+    requestCategory: `urn:entity:${category}`,
+    signalEntityIds: [`${residentId}-seed`],
+    excludedEntityIds: [],
+    delivery: "cache",
+  },
+}))
 async function bundle(world) {
   const plan = planScene(world, mockSignals)
   return {
     plan,
-    scene: await new MockLLMProvider().generateScene({
+    scene: sceneFixture({
       world,
       plan,
       signals: mockSignals,
+      qloo: {
+        configured: true,
+        baseUrl: "https://hackathon.api.qloo.com",
+        lastSuccessfulCall: "2026-10-25T00:00:00.000Z",
+        requestCategories: ["test"],
+        cacheStatus: "hit",
+        lastError: null,
+        recommendations: mockSignals.length,
+        liveRequests: 0,
+        cachedRequests: 1,
+      },
     }),
     diagnostics: {
-      llm: "Groq Mock",
-      taste: "Qloo Mock",
-      model: "openai/gpt-oss-120b",
+      llm: "Groq Live",
+      requestStatus: "success",
+      attempts: 1,
+      repetition: "test fixture",
+      taste: "Qloo Cache",
+      model: "openai/gpt-oss-20b",
       reason: null,
       tasteReason: null,
       calls: 0,
@@ -79,7 +120,7 @@ test("connected scenes split residents, visit every destination, advance days, p
     const b = await bundle(state.world)
     validateScene(b.scene, b.plan)
     validateSnapshot(state.world)
-    assert.equal(b.plan.participants.length, 2)
+    assert(b.plan.participants.length >= 1 && b.plan.participants.length <= 3)
     pairs.add(b.plan.participants.join(","))
     split ||= new Set(Object.values(b.plan.destinations)).size > 1
     const before = structuredClone(state)
@@ -106,13 +147,14 @@ test("connected scenes split residents, visit every destination, advance days, p
   }
   assert(split)
   assert.equal(visits.size, 3)
-  assert.equal(pairs.size, 3)
+  assert(pairs.size >= 3)
   assert.equal(state.world.day, 7)
   assert.equal(state.world.hour, 9)
 })
 test("memory and relationship suggestions commit only after their beats; large ticks equal small ticks", async () => {
-  const initial = idleLiving(),
-    b = await bundle(initial.world)
+  const initial = idleLiving()
+  initial.world.encounter = "pair"
+  const b = await bundle(initial.world)
   let state = beginLiving(initial, b)
   assert(state.world.agents.every((a) => a.memories.length === 0))
   state = advanceLiving(state, state.duration)
@@ -121,7 +163,7 @@ test("memory and relationship suggestions commit only after their beats; large t
     (a) => a.id === b.scene.beats[1].speaker
   ).relationships[b.scene.beats[0].speaker]
   state = advanceLiving(state, state.duration)
-  assert(state.world.agents.every((a) => a.memories.length === 0))
+  assert(state.world.agents.some((a) => a.memories.length > 0))
   state = advanceLiving(state, state.duration)
   assert.equal(
     state.world.agents.find((a) => a.id === b.scene.beats[1].speaker)
@@ -196,6 +238,18 @@ test("recent experiences, goals and actual cultural evidence affect local decisi
       entityId: "real-id",
       affinity: 0.9,
       source: "LIVE Qloo",
+      description: null,
+      properties: {},
+      explainability: null,
+      provenance: {
+        provider: "Qloo",
+        endpoint: "/v2/insights",
+        requestedAt: "2026-10-25T00:00:00.000Z",
+        requestCategory: "urn:entity:artist",
+        signalEntityIds: ["real-seed"],
+        excludedEntityIds: [],
+        delivery: "live",
+      },
     },
   ]
   assert(
@@ -207,10 +261,15 @@ test("recent experiences, goals and actual cultural evidence affect local decisi
   )
 })
 test("promise memory is available to later scenes, snapshot input is bounded", async () => {
-  let s = idleLiving(),
-    b = await bundle(s.world)
+  let s = idleLiving()
+  s.world.encounter = "pair"
+  const b = await bundle(s.world)
   b.scene.beats[2].dialogue = "I promise to meet you tomorrow."
-  b.scene.suggestedMemoryUpdates[0].kind = "promise"
+  b.scene.suggestedMemoryUpdates[0] = {
+    residentId: b.scene.beats[2].speaker,
+    beatIndex: 2,
+    kind: "promise",
+  }
   s = advanceLiving(beginLiving(s, b), 500)
   assert(
     s.world.agents.some((a) => a.important.some((m) => m.kind === "promise"))
@@ -219,6 +278,41 @@ test("promise memory is available to later scenes, snapshot input is bounded", a
   const bad = structuredClone(s.world)
   bad.agents[0].memories = Array(9).fill(bad.agents[0].memories[0])
   assert.throws(() => validateSnapshot(bad))
+})
+test("snapshot validation migrates oversized legacy Qloo metadata", () => {
+  const world = newWorld()
+  world.discoveries.push({
+    entityId: "legacy-qloo-entity",
+    name: "Legacy recommendation",
+    type: "urn:entity:artist",
+    description: null,
+    residentId: "mia",
+    discoveredAt: "2026-10-25T00:00:00.000Z",
+    day: 1,
+    scene: 1,
+    status: "discovered",
+    affinity: 0.5,
+    properties: {
+      geocode: { city: "Accra", latitude: 5.6037, longitude: -0.187 },
+      payload: "x".repeat(50000),
+    },
+    explainability: { payload: "y".repeat(50000) },
+    provenance: {
+      provider: "Qloo",
+      endpoint: "/v2/insights",
+      requestedAt: "2026-10-25T00:00:00.000Z",
+      requestCategory: "urn:entity:artist",
+      signalEntityIds: ["verified-seed"],
+      excludedEntityIds: [],
+      delivery: "live",
+    },
+    reaction: null,
+  })
+  const migrated = validateSnapshot(world)
+  assert.equal(migrated.discoveries[0].properties.geocode.city, "Accra")
+  assert(JSON.stringify(migrated.discoveries[0].properties).length <= 1200)
+  assert(JSON.stringify(migrated.discoveries[0].explainability).length <= 1200)
+  assert(Buffer.byteLength(JSON.stringify(migrated)) < 48000)
 })
 test("durable server quotas count reservations, survive reloads, reject new-session bypass and fail closed", () => {
   const root = mkdtempSync(join(tmpdir(), "world-quota-"))
@@ -235,6 +329,9 @@ test("durable server quotas count reservations, survive reloads, reject new-sess
     process.env.GROQ_DAILY_TOKEN_LIMIT = "10000"
     const a = quota.createSession()
     assert.equal(quota.reserve(a, 100), 1)
+    quota.recordUsage(a, 20, 10)
+    assert.equal(quota.sessionStatus(a).reserved, 0)
+    assert.equal(quota.sessionStatus(a).input, 20)
     assert.throws(() => quota.reserve(a, 100), /close/)
     now += 2000
     assert.equal(quota.reserve(a, 100), 2)
@@ -265,9 +362,31 @@ test("durable server quotas count reservations, survive reloads, reject new-sess
 
 test("official Groq SDK sends strict scene requests and rejects invalid output without retries", async () => {
   const Groq = require("groq-sdk").default
-  const { GroqProvider, providerError, sceneTokenReservation } = require(
-    join(output, "server/groq.js")
-  )
+  const {
+    GroqProvider,
+    normalizeGeneratedScene,
+    providerError,
+    sceneTokenReservation,
+  } = require(join(output, "server/groq.js"))
+  const arrivalDraft = {
+    beats: [
+      { speaker: "mia", replyTo: null, dialogue: "Look at the fountain." },
+      { speaker: "kai", replyTo: 0, dialogue: "The water is leaning." },
+      { speaker: "mia", replyTo: 1, dialogue: "It does that in the wind." },
+      { speaker: "luna", replyTo: 1, dialogue: "I can see the tilt." },
+    ],
+  }
+  const arrivalPlan = {
+    arrival: { residentId: "luna", beforeBeat: 2 },
+    initialParticipants: ["mia", "kai"],
+  }
+  normalizeGeneratedScene(arrivalDraft, arrivalPlan)
+  assert.equal(arrivalDraft.beats[0].replyTo, null)
+  assert.equal(arrivalDraft.beats[2].replyTo, 1)
+  assert.equal(arrivalDraft.beats[3].replyTo, 2)
+  assert.deepEqual(arrivalDraft.suggestedMemoryUpdates, [])
+  assert.deepEqual(arrivalDraft.suggestedRelationshipChanges, [])
+  assert.match(arrivalDraft.beats[2].dialogue, /Luna/)
   const world = newWorld(),
     b = await bundle(world),
     scene = structuredClone(b.scene)
@@ -314,11 +433,31 @@ test("official Groq SDK sends strict scene requests and rejects invalid output w
   })
   const provider = new GroqProvider(client),
     context = { world, plan: b.plan, signals: mockSignals }
-  assert.deepEqual(await provider.generateScene(context), scene)
+  assert.deepEqual(await provider.generateScene(context), {
+    ...scene,
+    suggestedMemoryUpdates: [],
+    suggestedRelationshipChanges: [],
+  })
   assert.equal(calls, 1)
-  assert.equal(sent.model, "openai/gpt-oss-120b")
+  assert.equal(sent.model, "openai/gpt-oss-20b")
   assert.equal(sent.response_format.json_schema.strict, true)
   assert.equal(sent.response_format.type, "json_schema")
+  assert(
+    !JSON.stringify(sent.response_format.json_schema.schema).includes(
+      "maxLength"
+    )
+  )
+  assert(
+    !JSON.stringify(sent.response_format.json_schema.schema).includes(
+      "maxItems"
+    )
+  )
+  const prompt = JSON.parse(sent.messages[1].content)
+  assert(
+    prompt.culturalDiscoveries.every(
+      (signal) => !("properties" in signal) && !("explainability" in signal)
+    )
+  )
   assert.equal(provider.usage.inputTokens, 700)
   assert(sceneTokenReservation(context) > 900)
   scene.beats[0].action = "teleport"
@@ -370,6 +509,729 @@ test("origin checks handle Next's normalized URL and reject cross-origin/missing
       new Request("http://localhost:3001/api/world/scene", {
         headers: { host: "127.0.0.1:3001" },
       })
+    )
+  )
+})
+
+test("pair, trio and solo gatherings use actual square occupancy and preserve independent activities", async () => {
+  const { squareOccupants } = require(join(output, "living/presence.js"))
+  for (const [mode, ids] of [
+    ["pair", ["mia", "kai"]],
+    ["trio", ["mia", "kai", "luna"]],
+    ["solo", ["luna"]],
+  ]) {
+    const initial = idleLiving()
+    // Encounter controls apply after the deterministic opening scene.
+    initial.world.completed = 1
+    initial.world.encounter = mode
+    const b = await bundle(initial.world)
+    assert.deepEqual(b.plan.participants, ids)
+    let state = beginLiving(initial, b)
+    assert.deepEqual(state.positions, initial.positions)
+    assert.equal(state.history.length, 0)
+    const firstStep = advanceLiving(state, 0.05)
+    firstStep.positions.forEach((p, i) =>
+      assert(
+        Math.hypot(
+          p[0] - state.positions[i][0],
+          p[1] - state.positions[i][1]
+        ) <= 3
+      )
+    )
+    state = advanceLiving(state, state.duration)
+    assert.deepEqual(
+      [...squareOccupants(state.positions)].sort(),
+      [...ids].sort()
+    )
+    assert.deepEqual([...state.present].sort(), [...ids].sort())
+    state = advanceLiving(state, 1000)
+    assert.deepEqual(
+      [...new Set(state.history.map((l) => l.speaker))].sort(),
+      [...ids].sort()
+    )
+    assert.equal(state.phase, "finished")
+    assert(state.world.agents.every((a) => a.location !== "square"))
+    const next = beginLiving(state, await bundle(state.world))
+    assert.equal(next.phase, "gathering")
+    assert.equal(next.round, state.world.completed + 1)
+    assert.equal(next.history.length, state.history.length)
+  }
+})
+test("Luna walks into an ongoing conversation, is acknowledged, and cannot speak or receive memories remotely", async () => {
+  const initial = idleLiving()
+  initial.world.completed = 1
+  initial.world.encounter = "join"
+  const b = await bundle(initial.world)
+  const invalid = structuredClone(b.scene)
+  invalid.beats[0].speaker = "luna"
+  assert.throws(() => validateScene(invalid, b.plan), /Absent/)
+  const remoteMemory = structuredClone(b.scene)
+  remoteMemory.suggestedMemoryUpdates = [
+    { residentId: "luna", beatIndex: 0, kind: "conversation" },
+  ]
+  assert.throws(() => validateScene(remoteMemory, b.plan), /Ungrounded/)
+  let state = beginLiving(initial, b)
+  state = advanceLiving(state, state.duration)
+  assert.deepEqual(state.present, ["mia", "kai"])
+  assert.deepEqual(state.positions[2], initial.positions[2])
+  state = advanceLiving(state, state.duration)
+  state = advanceLiving(state, state.duration)
+  assert(state.joining)
+  assert.equal(state.speech, null)
+  assert.equal(state.history.length, 2)
+  assert(!state.present.includes("luna"))
+  const start = state.positions[2]
+  state = advanceLiving(state, state.duration / 2)
+  assert.notDeepEqual(state.positions[2], start)
+  assert(!state.present.includes("luna"))
+  assert.equal(state.history.length, 2)
+  state = advanceLiving(state, state.duration - state.time)
+  assert(state.present.includes("luna"))
+  assert.match(state.speech.text, /Luna/)
+  assert.notEqual(state.speech.speaker, "luna")
+  state = advanceLiving(state, 1000)
+  assert(state.history.some((l) => l.speaker === "luna"))
+  assert.equal(
+    new Set(state.history.map((l) => l.id)).size,
+    state.history.length
+  )
+})
+test("early departure moves a tired resident while the other continues; departed speakers are rejected", async () => {
+  const initial = idleLiving()
+  initial.world.encounter = "pair"
+  initial.world.agents[0].energy = 20
+  const b = await bundle(initial.world)
+  const leaveIndex = b.scene.beats.findIndex((l) => l.action === "walk_to")
+  assert(leaveIndex >= 0)
+  let state = beginLiving(initial, b)
+  state = advanceLiving(state, state.duration)
+  for (let i = 0; i <= leaveIndex; i++)
+    state = advanceLiving(state, state.duration)
+  assert(!state.present.includes("mia"))
+  assert(state.transits.mia)
+  assert.equal(state.speech.speaker, "kai")
+  const before = state.positions[0]
+  state = advanceLiving(state, 0.5)
+  assert.notDeepEqual(state.positions[0], before)
+  const bad = structuredClone(b.scene)
+  bad.beats[leaveIndex + 1].speaker = "mia"
+  assert.throws(() => validateScene(bad, b.plan), /Absent/)
+  state = advanceLiving(state, 1000)
+  assert.equal(state.world.agents[0].location, b.plan.destinations.mia)
+})
+test("automatic schedules retain pairs and make shared-event trio opportunities without a fixed rotation", () => {
+  const world = newWorld()
+  world.completed = 1
+  world.situation = "performance"
+  world.agents.forEach((a) => {
+    a.social = 80
+    a.energy = 80
+  })
+  const shared = planScene(world, mockSignals)
+  assert.equal(shared.participants.length, 3)
+  world.situation = "sunny"
+  world.agents.forEach((a) => (a.social = 5))
+  assert.equal(planScene(world, mockSignals).participants.length, 1)
+})
+
+test("the first two simulated days include a real three-resident planned gathering", async () => {
+  const initial = idleLiving()
+  initial.world.completed = 2
+  initial.world.day = 1
+  initial.world.hour = 19
+  const b = await bundle(initial.world)
+  assert.deepEqual(b.plan.participants, ["mia", "kai", "luna"])
+  assert.equal(b.plan.sceneType, "group_hangout")
+  assert.equal(b.plan.gathering.status, "planned")
+  assert.deepEqual(b.plan.gathering.invited, ["mia", "kai", "luna"])
+  let state = beginLiving(initial, b)
+  assert.equal(state.world.gatherings.at(-1).status, "traveling")
+  state = advanceLiving(state, state.duration)
+  assert.deepEqual([...state.present].sort(), ["kai", "luna", "mia"])
+  assert.equal(state.world.gatherings.at(-1).status, "active")
+  state = advanceLiving(state, 1000)
+  assert.equal(state.world.gatherings.at(-1).status, "completed")
+  assert.deepEqual(
+    [...new Set(state.history.map((line) => line.speaker))].sort(),
+    ["kai", "luna", "mia"]
+  )
+  assert.equal(state.world.socialMemories.at(-1).participants.length, 3)
+})
+
+test("a verified Qloo discovery can produce an invitation, movement, experience, and taste update", async () => {
+  const initial = idleLiving()
+  const b = await bundle(initial.world)
+  assert(b.plan.culturalDecision)
+  assert.equal(b.plan.gathering.entityId, b.plan.culturalDecision.entityId)
+  assert(b.plan.gathering.invited.includes(b.plan.culturalDecision.residentId))
+  let state = beginLiving(initial, b)
+  const stored = state.world.discoveries.find(
+    (item) => item.entityId === b.plan.culturalDecision.entityId
+  )
+  assert(stored)
+  assert.equal(stored.provenance.provider, "Qloo")
+  assert(Object.keys(state.transits).length > 0)
+  state = advanceLiving(state, 1000)
+  assert.equal(state.phase, "finished")
+  const experienced = state.world.discoveries.find(
+    (item) => item.entityId === b.plan.culturalDecision.entityId
+  )
+  assert(["liked", "disliked", "considered"].includes(experienced.status))
+  if (state.bundle.plan.culturalDecision.completed) {
+    const profile = state.world.tasteProfiles.find(
+      (item) => item.residentId === b.plan.culturalDecision.residentId
+    )
+    assert(
+      profile.preferenceChanges.some(
+        (change) => change.entityId === b.plan.culturalDecision.entityId
+      )
+    )
+  }
+})
+
+const {
+  normalizeDialogue,
+  similarDialogue,
+  validateDialogue,
+  confirmedFacts,
+  DialogueQualityError,
+} = require(join(output, "living/dialogue.js"))
+const { generateConversation } = require(join(output, "server/generation.js"))
+test("normalized exact and near duplicates reject cross-speaker reuse and six-line sequences", async () => {
+  assert.equal(normalizeDialogue("  I’m HERE!  "), "i m here")
+  assert(
+    similarDialogue(
+      "The fountain looks like a crown from here.",
+      "The fountain looks like a crown from here!"
+    )
+  )
+  assert(
+    similarDialogue(
+      "The fountain looks like a crown from here.",
+      "The fountain looks like a crown from there."
+    )
+  )
+  assert(!similarDialogue("Yes.", "Yet."))
+  const world = newWorld()
+  world.encounter = "trio"
+  const b = await bundle(world)
+  assert.equal(b.scene.beats.length, 6)
+  world.recentScenes = [
+    {
+      sceneId: "previous",
+      topic: "different",
+      lines: b.scene.beats.map((l) => ({
+        speaker: l.speaker,
+        text: l.dialogue,
+      })),
+    },
+  ]
+  const swapped = structuredClone(b.scene)
+  swapped.beats.forEach(
+    (l) => (l.speaker = { mia: "kai", kai: "luna", luna: "mia" }[l.speaker])
+  )
+  assert.throws(
+    () => validateDialogue(swapped, { world, plan: b.plan, signals: [] }),
+    /multi-line sequence/
+  )
+  world.recentScenes = []
+  world.recentDialogue = [
+    {
+      speaker: "luna",
+      text: b.scene.beats[0].dialogue.replace("crown", "little crown"),
+    },
+  ]
+  assert.throws(
+    () => validateDialogue(b.scene, { world, plan: b.plan, signals: [] }),
+    /repeated dialogue/
+  )
+  world.recentDialogue = []
+  const internal = structuredClone(b.scene)
+  internal.beats[4].dialogue = internal.beats[0].dialogue
+  assert.throws(
+    () => validateDialogue(internal, { world, plan: b.plan, signals: [] }),
+    /repeated dialogue/
+  )
+})
+test("grounding rejects imaginary callbacks, quotations, unknown evidence, forward replies and unfinished closure", async () => {
+  const world = newWorld()
+  world.encounter = "trio"
+  const b = await bundle(world),
+    context = { world, plan: b.plan, signals: [] }
+  validateDialogue(b.scene, context)
+  for (const text of [
+    "Remember when we sang yesterday?",
+    "Actually, I take it back. I liked that bit.",
+    "You said “the moon is made of jam.”",
+  ]) {
+    const scene = structuredClone(b.scene)
+    scene.beats[0].dialogue = text
+    assert.throws(() => validateDialogue(scene, context), /unestablished/)
+  }
+  const unknown = structuredClone(b.scene)
+  unknown.beats[0].references = ["imaginary"]
+  assert.throws(() => validateDialogue(unknown, context), /unknown evidence/)
+  const forward = structuredClone(b.scene)
+  forward.beats[1].replyTo = 5
+  assert.throws(() => validateScene(forward, b.plan), /continuity/)
+  const dangling = structuredClone(b.scene)
+  dangling.beats.at(-1).dialogue = "What will you draw?"
+  assert.throws(
+    () => validateDialogue(dangling, context),
+    /unanswered question/
+  )
+  world.recentDialogue = [
+    { speaker: "kai", text: "I like the shape of the fountain." },
+  ]
+  const grounded = structuredClone(b.scene)
+  grounded.beats[0].dialogue =
+    "Kai, you told me “I like the shape of the fountain.” Which part?"
+  grounded.beats[0].references = ["dialogue:0"]
+  validateDialogue(grounded, context)
+  assert(confirmedFacts(context).some((f) => f.text.startsWith("kai said:")))
+})
+test("engine preserves intended speakers and records only completed scenes, with bounded history and topic cooldown", async () => {
+  let state = idleLiving()
+  state.world.encounter = "trio"
+  for (let n = 0; n < 6; n++) {
+    const b = await bundle(state.world)
+    assert(
+      !(state.world.recentScenes ?? []).some((s) => s.topic === b.plan.topic)
+    )
+    const expected = b.scene.beats.map((l) => ({
+      speaker: l.speaker,
+      text: l.dialogue,
+    }))
+    const before = state.world.recentScenes.length
+    state = beginLiving(state, b)
+    state = advanceLiving(state, state.duration)
+    assert.equal(state.world.recentScenes.length, before)
+    state = advanceLiving(state, 1000)
+    assert.deepEqual(
+      state.history
+        .slice(-expected.length)
+        .map((l) => ({ speaker: l.speaker, text: l.text })),
+      expected
+    )
+    assert.deepEqual(state.world.recentScenes.at(-1).lines, expected)
+    assert(state.world.recentScenes.length <= 4)
+    validateSnapshot(state.world)
+  }
+})
+test("repetition gets one fresh-angle retry, all failures remain bounded, and quota failure stops requests", async () => {
+  const world = newWorld(),
+    b = await bundle(world),
+    context = { world, plan: b.plan, signals: [] }
+  let requests = 0
+  const invalid = structuredClone(b.scene)
+  invalid.beats[1].dialogue = invalid.beats[0].dialogue
+  const result = await generateConversation(context, async (next) => {
+    requests++
+    if (requests === 1) {
+      assert.equal(next.retryAngle, undefined)
+      return invalid
+    }
+    assert.match(next.retryAngle, /different present-tense detail/)
+    return b.scene
+  })
+  assert.equal(requests, 2)
+  assert.deepEqual(result.scene, b.scene)
+  assert.match(result.repetition, /passed/)
+  requests = 0
+  const repeated = await generateConversation(context, async () => {
+    requests++
+    return invalid
+  })
+  assert.equal(requests, 2)
+  assert.equal(repeated.scene, null)
+  assert.match(repeated.repetition, /rejected/)
+  requests = 0
+  const limited = await generateConversation(context, async () => {
+    requests++
+    throw Error("Daily free-use ceiling reached")
+  })
+  assert.equal(requests, 1)
+  assert.equal(limited.scene, null)
+  requests = 0
+  const failed = await generateConversation(
+    context,
+    async () => {
+      requests++
+      throw Error("503")
+    },
+    { retryable: () => true }
+  )
+  assert.equal(requests, 2)
+  assert.equal(failed.scene, null)
+  assert(repeated.failure instanceof DialogueQualityError)
+})
+test("fallback advances independent activities without dialogue, invented social memories, or stale scene replay", async () => {
+  let state = idleLiving()
+  const live = await bundle(state.world)
+  state = advanceLiving(beginLiving(state, live), 1000)
+  const history = structuredClone(state.history),
+    scenes = structuredClone(state.world.recentScenes)
+  for (let n = 0; n < 4; n++) {
+    const b = await bundle(state.world)
+    b.scene = quietScene(b.plan)
+    b.diagnostics = {
+      ...b.diagnostics,
+      llm: "Fallback",
+      requestStatus: "failed",
+      repetition: "not checked",
+      reason: "Groq unavailable",
+    }
+    state = beginLiving(state, b)
+    assert.equal(state.phase, "traveling")
+    assert.equal(state.speech, null)
+    state = advanceLiving(state, 1000)
+    assert.equal(state.phase, "finished")
+    assert.deepEqual(state.history, history)
+    assert.deepEqual(state.world.recentScenes, scenes)
+    assert(
+      state.world.agents.every((a) => a.location === b.plan.destinations[a.id])
+    )
+  }
+  const forged = await bundle(state.world)
+  forged.diagnostics.llm = "Fallback"
+  assert.throws(
+    () => beginLiving(state, forged),
+    /Fallback must not contain dialogue/
+  )
+})
+
+test("three consecutive SDK fixture scenes keep a thread, distinct voices, endings and bounded recent context", async () => {
+  // Authored responses from a fake SDK transport: this is NOT a live Groq quality claim.
+  const Groq = require("groq-sdk").default
+  const { GroqProvider, sceneTokenReservation } = require(
+    join(output, "server/groq.js")
+  )
+  const exchanges = [
+    [
+      ["mia", "The fountain looks like a crown. Kai, would you wear it?"],
+      [
+        "kai",
+        "Only if I could dodge the water. That crown seems determined to soak me.",
+      ],
+      [
+        "luna",
+        "A crown with its own rain. I'll draw the silhouette from here.",
+      ],
+      ["mia", "Draw Kai beside it, looking heroic and staying completely dry."],
+      [
+        "kai",
+        "I can manage the dry part. The heroic part might take practice.",
+      ],
+      ["luna", "Stay there, then. I'll begin with the outline."],
+    ],
+    [
+      [
+        "luna",
+        "I want to try drawing without lifting my pencil. What should I start with?",
+      ],
+      ["mia", "My sleeve. It has enough wrinkles to keep your pencil busy."],
+      ["kai", "Or my shoe, if you want a dramatic subject."],
+      [
+        "luna",
+        "The sleeve is still, which gives it an advantage over your shoe.",
+      ],
+      ["kai", "Fair. My foot keeps wandering. I'll watch instead."],
+      ["mia", "Here, I'll hold my arm against the bench while you start."],
+    ],
+    [
+      [
+        "kai",
+        "I'm in the mood to dance. Does either of you want to try a very small step?",
+      ],
+      ["mia", "Small enough to fit between these paving stones? I'm willing."],
+      [
+        "luna",
+        "I'll watch the stones. Someone should make sure they aren't moving too.",
+      ],
+      ["kai", "Just a step sideways, then back. I'll go slowly."],
+      ["mia", "Slowly sounds manageable. Give me a little room."],
+      ["luna", "I'll move to the edge and leave the middle to you."],
+    ],
+  ]
+  let state = idleLiving()
+  state.world.encounter = "trio"
+  let outgoing
+  for (const exchange of exchanges) {
+    const b = await bundle(state.world)
+    b.scene.beats = exchange.map(([speaker, dialogue], index) => ({
+      speaker,
+      dialogue,
+      emotion: "curious",
+      action: "talk",
+      targetLocation: null,
+      replyTo: index ? index - 1 : null,
+      references: [],
+    }))
+    b.scene.suggestedMemoryUpdates = []
+    b.scene.suggestedRelationshipChanges = []
+    const context = { world: state.world, plan: b.plan, signals: mockSignals }
+    const provider = new GroqProvider(
+      new Groq({
+        apiKey: "test-only",
+        maxRetries: 0,
+        fetch: async (_url, init) => {
+          outgoing = JSON.parse(init.body)
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  finish_reason: "stop",
+                  message: { content: JSON.stringify(b.scene) },
+                },
+              ],
+              usage: { prompt_tokens: 1000, completion_tokens: 300 },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        },
+      })
+    )
+    const result = await generateConversation(context, (c) =>
+      provider.generateScene(c)
+    )
+    assert(result.scene, result.failure?.message)
+    const prompt = JSON.parse(outgoing.messages[1].content)
+    assert.deepEqual(prompt.encounter.participants, ["mia", "kai", "luna"])
+    assert.deepEqual(prompt.world.recentDialogue, state.world.recentDialogue)
+    assert(prompt.world.recentDialogue.length <= 8)
+    assert(
+      sceneTokenReservation(context) < 20000,
+      "one scene remains within configured minute token reservation ceiling"
+    )
+    state = advanceLiving(
+      beginLiving(state, { ...b, scene: result.scene }),
+      1000
+    )
+    assert.equal(state.phase, "finished")
+  }
+  assert.equal(state.world.recentScenes.length, 3)
+  assert.equal(
+    new Set(state.history.map((l) => normalizeDialogue(l.text))).size,
+    18
+  )
+})
+
+const {
+  QlooClient,
+  QlooError,
+  culturalIntelligence,
+  resetQlooClientForTests,
+  QLOO_HACKATHON_ORIGIN,
+} = require(join(output, "server/qloo.js"))
+
+test("Qloo client pins the hackathon host, authenticates server-side, validates entities, and caches real responses", async () => {
+  resetQlooClientForTests()
+  const requests = []
+  const transport = async (url, init) => {
+    requests.push({ url: new URL(url), init })
+    const target = new URL(url)
+    if (target.pathname === "/search")
+      return Response.json({
+        results: [
+          {
+            entity_id: "verified-miles-davis",
+            name: "Miles Davis",
+            types: ["urn:entity:artist"],
+          },
+        ],
+      })
+    return Response.json({
+      results: {
+        entities: [
+          {
+            entity_id: "recommended-artist",
+            name: "Real Recommendation",
+            type: "urn:entity:artist",
+            description: "Returned by the fixture transport.",
+            properties: {
+              geocode: { city: "Accra", latitude: 5.6037, longitude: -0.187 },
+              biography: "x".repeat(9000),
+            },
+            query: {
+              affinity: 0.73,
+              explainability: {
+                signals: Array.from({ length: 100 }, (_, i) =>
+                  `explanation-${i}-`.repeat(30)
+                ),
+              },
+            },
+          },
+        ],
+      },
+    })
+  }
+  const client = new QlooClient({
+    apiKey: "test-secret-key",
+    fetch: transport,
+    sleep: async () => {},
+  })
+  const search = await client.search("Miles Davis", "urn:entity:artist")
+  assert.equal(search.data[0].entityId, "verified-miles-davis")
+  const recommendation = await client.insights({
+    type: "urn:entity:artist",
+    entityIds: [search.data[0].entityId],
+  })
+  assert.equal(recommendation.data[0].affinity, 0.73)
+  assert.equal(recommendation.data[0].properties.geocode.city, "Accra")
+  assert(JSON.stringify(recommendation.data[0].properties).length <= 1200)
+  assert(JSON.stringify(recommendation.data[0].explainability).length <= 1200)
+  await client.insights({
+    type: "urn:entity:artist",
+    entityIds: [search.data[0].entityId],
+  })
+  assert.equal(requests.length, 2)
+  assert(
+    requests.every((request) => request.url.origin === QLOO_HACKATHON_ORIGIN)
+  )
+  assert.equal(requests[0].url.searchParams.get("types"), "urn:entity:artist")
+  assert.equal(
+    requests[1].url.searchParams.get("signal.interests.entities"),
+    "verified-miles-davis"
+  )
+  assert.equal(requests[0].init.headers["X-Api-Key"], "test-secret-key")
+  assert(!JSON.stringify(recommendation).includes("test-secret-key"))
+  assert.equal(client.cachedRequests, 1)
+})
+
+test("Qloo client reports configuration, authentication, rate-limit, and empty-result failures without mock data", async () => {
+  resetQlooClientForTests()
+  assert.throws(
+    () => new QlooClient({ apiKey: "x", baseUrl: "https://api.qloo.com" }),
+    /hackathon\.api\.qloo\.com/
+  )
+  const forbidden = new QlooClient({
+    apiKey: "bad",
+    fetch: async () => Response.json({}, { status: 403 }),
+    sleep: async () => {},
+  })
+  await assert.rejects(
+    () => forbidden.search("Miles Davis", "urn:entity:artist"),
+    (error) => error instanceof QlooError && error.kind === "authentication"
+  )
+  let calls = 0
+  const limited = new QlooClient({
+    apiKey: "limited",
+    fetch: async () => {
+      calls++
+      return Response.json({}, { status: 429, headers: { "Retry-After": "0" } })
+    },
+    sleep: async () => {},
+  })
+  await assert.rejects(
+    () => limited.search("Miles Davis", "urn:entity:artist"),
+    (error) => error instanceof QlooError && error.kind === "rate_limit"
+  )
+  assert.equal(calls, 2)
+  resetQlooClientForTests()
+  const empty = new QlooClient({
+    apiKey: "valid",
+    fetch: async () => Response.json({ results: [] }),
+    sleep: async () => {},
+  })
+  await assert.rejects(
+    () => empty.search("Nobody", "urn:entity:artist"),
+    /returned no entities/
+  )
+})
+
+test("each resident resolves independent Qloo seeds and later liked experiences become future signals", async () => {
+  resetQlooClientForTests()
+  const requests = []
+  const transport = async (url) => {
+    const target = new URL(url)
+    requests.push(target)
+    if (target.pathname === "/search") {
+      const name = target.searchParams.get("query")
+      const type = target.searchParams.get("types")
+      return Response.json({
+        results: [
+          {
+            entity_id: `verified-${name.toLowerCase().replace(/[^a-z]+/g, "-")}`,
+            name,
+            types: [type],
+          },
+        ],
+      })
+    }
+    const type = target.searchParams.get("filter.type")
+    return Response.json({
+      results: {
+        entities: [
+          {
+            entity_id: `recommendation-${type}`,
+            name: `Recommendation for ${type}`,
+            type,
+            query: { affinity: 0.61 },
+          },
+        ],
+      },
+    })
+  }
+  const world = newWorld()
+  world.discoveries.push({
+    entityId: "liked-extra",
+    name: "Experienced Favorite",
+    type: "urn:entity:artist",
+    description: null,
+    residentId: "mia",
+    discoveredAt: "2026-10-25T00:00:00.000Z",
+    day: 1,
+    scene: 0,
+    status: "liked",
+    affinity: null,
+    properties: {},
+    explainability: null,
+    provenance: {
+      provider: "Qloo",
+      endpoint: "/v2/insights",
+      requestedAt: "2026-10-25T00:00:00.000Z",
+      requestCategory: "urn:entity:artist",
+      signalEntityIds: ["original-seed"],
+      excludedEntityIds: [],
+      delivery: "live",
+    },
+    reaction: "Mia enjoyed it",
+  })
+  const result = await culturalIntelligence(
+    world,
+    () =>
+      new QlooClient({
+        apiKey: "server-only",
+        fetch: transport,
+        sleep: async () => {},
+      })
+  )
+  assert.equal(result.signals.length, 3)
+  assert.deepEqual(result.signals.map((signal) => signal.residentId).sort(), [
+    "kai",
+    "luna",
+    "mia",
+  ])
+  assert.equal(new Set(result.signals.map((signal) => signal.category)).size, 3)
+  assert(
+    result.tasteProfiles.every(
+      (profile) => profile.verifiedInterests.length === 2
+    )
+  )
+  const insightRequests = requests.filter(
+    (request) => request.pathname === "/v2/insights"
+  )
+  assert.equal(insightRequests.length, 3)
+  assert(
+    insightRequests.some((request) =>
+      request.searchParams
+        .get("signal.interests.entities")
+        .includes("liked-extra")
+    )
+  )
+  assert(
+    result.signals.every(
+      (signal) => signal.provenance.signalEntityIds.length >= 2
     )
   )
 })

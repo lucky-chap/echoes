@@ -31,12 +31,15 @@ import { residents, destination, type Situation } from "@/lib/world/profiles"
 import {
   phaseNames as originalPhaseNames,
   phases,
-} from "@/lib/world/simulation"
+} from "@/lib/world/living/base"
+import { squareOccupants } from "@/lib/world/living/presence"
+import type { EncounterMode } from "@/lib/world/living/types"
 import { useWorld } from "./use-world"
 
 const phaseNames = {
   ...originalPhaseNames,
   gathering: "Crossing paths",
+  waiting: "Waiting for conversation…",
   proposing: "A chance encounter",
   completing: "Following our interests",
   finished: "A little pause",
@@ -86,6 +89,7 @@ export default function Worldlings() {
     updateAudio,
     start,
     changeSituation,
+    changeEncounter,
     reset,
     togglePause,
     interaction,
@@ -98,14 +102,15 @@ export default function Worldlings() {
     complete = sim.phase === "finished",
     elapsed = sim.total
   const spoken = sim.history,
-    current = sim.speech ?? spoken.at(-1)
+    current = sim.speech
   const speaker = current
     ? residents.findIndex((r) => r.id === current.speaker)
     : selected
   const activeSpeaker = sim.speech
     ? residents.findIndex((r) => r.id === sim.speech!.speaker)
     : -1
-  const moving = sim.phase === "gathering" || sim.phase === "traveling"
+  const moving = Object.keys(sim.transits).length > 0
+  const occupants = squareOccupants(sim.positions)
   const decided = ["deciding", "traveling", "completing", "finished"].includes(
     sim.phase
   )
@@ -135,7 +140,7 @@ export default function Worldlings() {
         selected,
         labels,
         sim.positions,
-        moving,
+        residents.map((r) => !!sim.transits[r.id]),
         activeSpeaker,
         sim.phase === "completing" ? sim.bundle?.plan.destinations : undefined
       )
@@ -148,6 +153,7 @@ export default function Worldlings() {
     activeSpeaker,
     sim.phase,
     sim.bundle,
+    sim.transits,
   ])
   useEffect(() => {
     if (!help) return
@@ -232,7 +238,9 @@ export default function Worldlings() {
                   ? "Tab paused"
                   : paused
                     ? "Paused"
-                    : phaseNames[sim.phase]}
+                    : sim.joining
+                      ? "A neighbor is joining"
+                      : phaseNames[sim.phase]}
               </span>
             </div>
             <div className="map-wrap">
@@ -245,7 +253,8 @@ export default function Worldlings() {
                 aria-label="Pixel-art Littlehaven: a café and music venue to the north, a fountain in the central town square, a pond to the west, and a museum to the east. Mia, Kai, and Luna gather here."
               />
               <div className="map-label">
-                <Sun size={14} /> LITTLEHAVEN <span>•</span> Day {sim.world.day} · {sim.world.hour}:00
+                <Sun size={14} /> LITTLEHAVEN <span>•</span> Day {sim.world.day}{" "}
+                · {sim.world.hour}:00
               </div>
               <div className="square-label">TOWN SQUARE</div>
               {sim.situation === "rain" && (
@@ -334,9 +343,9 @@ export default function Worldlings() {
                 stories.
               </span>
               <div>
-                <span className="mock-pill">
-                  {diagnostics?.llm ?? "Groq Mock"} ·{" "}
-                  {diagnostics?.taste ?? "Qloo Mock"}
+                <span className="provider-pill">
+                  {diagnostics?.llm ?? "Not generated"} ·{" "}
+                  {diagnostics?.taste ?? "Qloo not requested"}
                 </span>
                 <button
                   className="icon-button"
@@ -502,11 +511,16 @@ export default function Worldlings() {
                       <span className="interests">
                         {sim.world.agents[i].location === "square"
                           ? "Town square"
-                          : destination(
-                              sim.world.agents[i].location as
-                                "cafe" | "music" | "museum"
-                            ).name}{" "}
-                        · {moving ? "On the way" : sim.world.agents[i].goal}
+                          : sim.world.agents[i].location === "path"
+                            ? "Walking through town"
+                            : destination(
+                                sim.world.agents[i].location as
+                                  "cafe" | "music" | "museum"
+                              ).name}{" "}
+                        ·{" "}
+                        {sim.transits[r.id]
+                          ? "On the way"
+                          : sim.world.agents[i].goal}
                       </span>
                     </span>
                     <ChevronRight size={14} />
@@ -614,7 +628,9 @@ export default function Worldlings() {
                 </div>
               )}
               {sim.world.events.length > 0 && (
-                <p className="recent-incident">Recently: {sim.world.events.at(-1)}</p>
+                <p className="recent-incident">
+                  Recently: {sim.world.events.at(-1)}
+                </p>
               )}
               <div className="event-meta">
                 <span>
@@ -625,7 +641,7 @@ export default function Worldlings() {
                 </span>
                 <span>
                   <Users size={13} />
-                  {sim.bundle?.plan.participants.length ?? 2} crossing paths
+                  {occupants.length} in the square
                 </span>
               </div>
               <button
@@ -707,7 +723,7 @@ export default function Worldlings() {
                 World log<span className="count">{logs.length}</span>
               </button>
               <span className="script-label">
-                {diagnostics?.taste ?? "Qloo Mock"}
+                {diagnostics?.taste ?? "Qloo not requested"}
               </span>
             </div>
             <div
@@ -732,7 +748,9 @@ export default function Worldlings() {
                         {current
                           ? phaseNames[sim.phase]
                           : started
-                            ? "a story is beginning"
+                            ? diagnostics?.llm === "Fallback"
+                              ? "independent activities"
+                              : "between conversations"
                             : "enjoying the afternoon"}
                       </span>
                     </div>
@@ -740,8 +758,11 @@ export default function Worldlings() {
                       {current
                         ? `“${current.text}”`
                         : started
-                          ? "Footsteps on the path. A familiar face. Something lovely is about to happen."
-                          : "“There’s something about this town. It feels like a good day to meet someone new.”"}
+                          ? diagnostics?.llm === "Fallback"
+                            ? (diagnostics.reason ??
+                              "Dialogue unavailable. The neighbors continue their own activities.")
+                            : "The neighbors are following their plans."
+                          : "Start the simulation to meet the neighbors."}
                     </p>
                     <small>
                       {started
@@ -757,8 +778,8 @@ export default function Worldlings() {
                 <ol className="decision-log">
                   {!logs.length && (
                     <li>
-                      MOCK · Start an event to see every resident’s scores and
-                      the collective decision.
+                      Start an event to see every resident’s scores and the
+                      collective decision.
                     </li>
                   )}
                   {logs.map((l) => (
@@ -797,14 +818,69 @@ export default function Worldlings() {
           <details className="provider-details">
             <summary>
               Cultural signals & developer inspection ·{" "}
-              {diagnostics?.llm ?? "Groq Mock"} ·{" "}
-              {diagnostics?.taste ?? "Qloo Mock"}
+              {diagnostics?.llm ?? "Not generated"} ·{" "}
+              {diagnostics?.taste ?? "Qloo not requested"}
             </summary>
             <p>
               {diagnostics?.reason ??
                 "Live status appears only after a successful scene response."}
             </p>
             <p>{diagnostics?.tasteReason}</p>
+            <p data-testid="qloo-diagnostics">
+              Qloo:{" "}
+              {diagnostics?.qloo.configured === true
+                ? "configured"
+                : diagnostics?.qloo.configured === false
+                  ? "credentials missing"
+                  : "configuration unknown (scene request failed)"}
+              {" · "}Host:{" "}
+              {diagnostics?.qloo.baseUrl ?? "https://hackathon.api.qloo.com"}
+              {" · "}Last authenticated success:{" "}
+              {diagnostics?.qloo.lastSuccessfulCall ?? "none"}
+              {" · "}Cache: {diagnostics?.qloo.cacheStatus ?? "none"}
+              {" · "}Recommendations: {diagnostics?.qloo.recommendations ?? 0}
+              {" · "}Requests: {diagnostics?.qloo.liveRequests ?? 0} live /{" "}
+              {diagnostics?.qloo.cachedRequests ?? 0} cached
+            </p>
+            {diagnostics?.qloo.requestCategories.length ? (
+              <p>
+                Qloo request categories:{" "}
+                {diagnostics.qloo.requestCategories.join(", ")}
+              </p>
+            ) : null}
+            {diagnostics?.qloo.lastError ? (
+              <p role="status">Qloo error: {diagnostics.qloo.lastError}</p>
+            ) : null}
+            <p data-testid="dialogue-diagnostics">
+              Dialogue source: {diagnostics?.llm ?? "not requested"} · Model:{" "}
+              {diagnostics?.model ?? "pending"} · Scene:{" "}
+              {sim.bundle?.scene.sceneId ?? "none"} · Participants:{" "}
+              {sim.bundle?.plan.participants.join(", ") ?? "none"} · Request:{" "}
+              {diagnostics?.requestStatus ?? "not requested"} · Attempts:{" "}
+              {diagnostics?.attempts ?? 0} · Validation:{" "}
+              {diagnostics?.repetition ?? "not checked"}
+            </p>
+            <label>
+              Gathering scenario{" "}
+              <select
+                aria-label="Gathering scenario"
+                disabled={loading || (started && !complete)}
+                value={sim.world.encounter ?? "auto"}
+                onChange={(e) =>
+                  changeEncounter(e.target.value as EncounterMode)
+                }
+              >
+                <option value="auto">Natural schedules</option>
+                <option value="pair">Mia & Kai</option>
+                <option value="trio">All three together</option>
+                <option value="join">Luna joins Mia & Kai</option>
+                <option value="solo">Luna’s quiet moment</option>
+              </select>
+            </label>
+            <p data-testid="square-occupants">
+              In the square: {occupants.join(", ") || "nobody yet"}.
+              Conversation: {sim.present.join(", ") || "none"}.
+            </p>
             <p>
               Groq requests: {diagnostics?.calls ?? 0}/
               {diagnostics?.limit ?? 10} · Scene tokens:{" "}
@@ -815,9 +891,7 @@ export default function Worldlings() {
               {diagnostics?.signals.map((signal, i) => (
                 <li key={i}>
                   {signal.residentId}: {signal.name} · {signal.source}
-                  {signal.entityId
-                    ? ` · ${signal.entityId}`
-                    : " · illustrative interest"}
+                  {` · ${signal.entityId}`}
                   {signal.affinity !== null
                     ? ` · affinity ${signal.affinity}`
                     : ""}
@@ -829,6 +903,36 @@ export default function Worldlings() {
               relationships, weather, recent visits and seeded variation. They
               are not Qloo affinity scores.
             </p>
+            {sim.bundle?.plan.culturalDecision && (
+              <div data-testid="cultural-decision">
+                <strong>Latest Qloo-driven decision</strong>
+                <p>
+                  {sim.bundle.plan.culturalDecision.residentId} ·{" "}
+                  {sim.bundle.plan.culturalDecision.entityName} ·{" "}
+                  {sim.bundle.plan.culturalDecision.action} ·{" "}
+                  {sim.bundle.plan.culturalDecision.rationale}
+                </p>
+                <p>
+                  Verified signals:{" "}
+                  {sim.bundle.plan.culturalDecision.tasteSignalEntityIds.join(
+                    ", "
+                  )}
+                  {" · "}Completed:{" "}
+                  {sim.bundle.plan.culturalDecision.completed ? "yes" : "no"}
+                  {" · "}Preference changed:{" "}
+                  {sim.bundle.plan.culturalDecision.preferenceChanged
+                    ? "yes"
+                    : "no"}
+                </p>
+              </div>
+            )}
+            {sim.world.gatherings.at(-1) && (
+              <p data-testid="gathering-diagnostics">
+                Gathering: {sim.world.gatherings.at(-1)!.reason} ·{" "}
+                {sim.world.gatherings.at(-1)!.status} · invitees{" "}
+                {sim.world.gatherings.at(-1)!.invited.join(", ")}
+              </p>
+            )}
             {sim.bundle?.plan.scores.map((row) => (
               <p key={`${row.residentId}-${row.destinationId}`}>
                 {row.residentId} → {destination(row.destinationId).name}:{" "}
@@ -848,7 +952,7 @@ export default function Worldlings() {
               <p>
                 {diagnostics?.llm === "Groq Live"
                   ? "Groq Live · A new story, shaped by their memories."
-                  : "Groq Mock · Mock Fallback. The village keeps going offline."}
+                  : `Fallback · ${diagnostics?.reason ?? "Dialogue unavailable. Residents continue their own activities."}`}
               </p>
             </div>
             <ArrowDownRight size={18} />

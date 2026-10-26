@@ -153,7 +153,7 @@ export function drawResident(
   index: number,
   x: number,
   y: number,
-  walking = false,
+  walking: boolean | boolean[] = false,
   t = 0
 ) {
   const hair = ["#76472f", "#343f39", "#5c4262"][index],
@@ -192,7 +192,7 @@ export function drawTown(
   selected: number,
   labels: boolean,
   positions: Point[] = residents.map((r) => r.start),
-  walking = false,
+  walking: boolean | boolean[] = false,
   activeSpeaker = -1,
   activity?: DestinationId | Partial<Record<ResidentId, DestinationId>>
 ) {
@@ -333,7 +333,14 @@ export function drawTown(
     if (selected === i || activeSpeaker === i) {
       ellipse(c, x, y + 3, 9, 3, "#f5e1a0")
     }
-    drawResident(c, i, x, y, walking, seconds)
+    drawResident(
+      c,
+      i,
+      x,
+      y,
+      Array.isArray(walking) ? walking[i] : walking,
+      seconds
+    )
     // Tiny original props make each completed outing visible in the town.
     if (residentActivity === "cafe") {
       rect(c, x + 5, y - 8, 4, 4, "#f5e4b9")

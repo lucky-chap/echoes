@@ -4,10 +4,12 @@ import {
   advanceLiving as advanceSimulation,
   beginLiving,
   idleLiving as idleSimulation,
+  restoreLiving,
 } from "@/lib/world/living/engine"
-import { MockLLMProvider, mockSignals } from "@/lib/world/living/mock"
+import { quietScene } from "@/lib/world/living/fallback"
 import { planScene } from "@/lib/world/living/planner"
-import type { SceneBundle } from "@/lib/world/living/types"
+import type { SceneBundle, EncounterMode } from "@/lib/world/living/types"
+import { validateSnapshot } from "@/lib/world/living/validation"
 import { type Situation } from "@/lib/world/profiles"
 import {
   WorldAudio,
@@ -30,7 +32,20 @@ export function useWorld() {
   const sessionReady = useRef(false)
   const latest = useRef(sim)
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = localStorage.getItem("worldlings-world-v1")
+        if (stored) setSim(restoreLiving(validateSnapshot(JSON.parse(stored))))
+      } catch {
+        localStorage.removeItem("worldlings-world-v1")
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+  useEffect(() => {
     latest.current = sim
+    if (sim.phase === "finished")
+      localStorage.setItem("worldlings-world-v1", JSON.stringify(sim.world))
   }, [sim])
   const settings = useRef(audioSettings)
   const enableAudio = useCallback(() => {
@@ -132,8 +147,10 @@ export function useWorld() {
       setError("")
       audio.current?.stopSpeech()
       enableAudio()
-      const world = latest.current.world
+      let world = latest.current.world
       try {
+        // Also migrates snapshots created before Qloo metadata was bounded.
+        world = validateSnapshot(world)
         if (freshSession || !sessionReady.current) {
           const response = await fetch("/api/world/session", {
             method: "POST",
@@ -153,33 +170,49 @@ export function useWorld() {
           throw Error((await response.json()).error || "Scene unavailable")
         const bundle: SceneBundle = await response.json()
         if (token === request.current)
-          setSim(beginLiving(latest.current, bundle))
+          setSim(beginLiving({ ...latest.current, world }, bundle))
       } catch (e) {
-        const plan = planScene(world, mockSignals)
-        const scene = await new MockLLMProvider().generateScene({
-          world,
-          plan,
-          signals: mockSignals,
-        })
+        const plan = planScene(world, [])
+        const scene = quietScene(plan)
         if (token === request.current) {
           const reason =
             e instanceof Error ? e.message : "Connection unavailable"
+          const previousQloo = latest.current.bundle?.diagnostics.qloo
           setError(reason)
           setSim(
-            beginLiving(latest.current, {
-              scene,
-              plan,
-              diagnostics: {
-                llm: "Groq Mock",
-                model: "openai/gpt-oss-120b",
-                taste: "Qloo Mock",
-                reason,
-                tasteReason: "Offline interests",
-                calls: 0,
-                limit: 10,
-                signals: mockSignals,
-              },
-            })
+            beginLiving(
+              { ...latest.current, world },
+              {
+                scene,
+                plan,
+                diagnostics: {
+                  llm: "Fallback",
+                  requestStatus: "failed",
+                  attempts: 0,
+                  repetition: "not checked — no dialogue",
+                  model: "unknown (scene request failed)",
+                  taste: "Qloo Unavailable",
+                  reason,
+                  tasteReason:
+                    "The scene request did not return provider diagnostics; Qloo may not have been attempted.",
+                  calls: 0,
+                  limit: 10,
+                  signals: [],
+                  qloo: {
+                    configured: previousQloo?.configured ?? null,
+                    baseUrl: "https://hackathon.api.qloo.com",
+                    lastSuccessfulCall:
+                      previousQloo?.lastSuccessfulCall ?? null,
+                    requestCategories: [],
+                    cacheStatus: "none",
+                    lastError: `Scene request failed: ${reason}`,
+                    recommendations: 0,
+                    liveRequests: 0,
+                    cachedRequests: 0,
+                  },
+                },
+              }
+            )
           )
         }
       } finally {
@@ -203,6 +236,15 @@ export function useWorld() {
     const timer = setTimeout(() => void run(), 1500)
     return () => clearTimeout(timer)
   }, [sim.phase, sim.world.completed, paused, hidden, loading, checkpoint, run])
+  useEffect(() => {
+    if (sim.phase !== "waiting" || paused || hidden || loading) return
+    const retryAt = sim.bundle?.diagnostics.retryAt ?? Date.now() + 5000
+    const timer = window.setTimeout(
+      () => void run(),
+      Math.max(1000, retryAt - Date.now())
+    )
+    return () => clearTimeout(timer)
+  }, [sim.phase, sim.bundle?.diagnostics.retryAt, paused, hidden, loading, run])
   function start() {
     if (!["idle", "finished"].includes(latest.current.phase)) return
     setCheckpoint(latest.current.world.completed + 3)
@@ -231,7 +273,10 @@ export function useWorld() {
     setLoading(false)
     setPaused(false)
     setError("")
-    setSim(idleSimulation(latest.current.situation))
+    localStorage.removeItem("worldlings-world-v1")
+    const fresh = idleSimulation(latest.current.situation)
+    fresh.world.encounter = latest.current.world.encounter
+    setSim(fresh)
   }
   return {
     sim,
@@ -248,6 +293,10 @@ export function useWorld() {
     updateAudio,
     start,
     changeSituation,
+    changeEncounter: (encounter: EncounterMode) => {
+      if (!busy.current && ["idle", "finished"].includes(latest.current.phase))
+        setSim((s) => ({ ...s, world: { ...s.world, encounter } }))
+    },
     reset,
     togglePause: () => {
       audio.current?.stopSpeech()
