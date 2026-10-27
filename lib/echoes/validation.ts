@@ -16,6 +16,6 @@ export const kitRequestSchema = z.object({
   feedback: z.array(z.object({
     residentId: z.string().min(1).max(64),
     entityId: z.string().min(1).max(160),
-    status: z.enum(["sparked", "distressed"]),
+    status: z.enum(["sparked", "neutral", "distressed"]),
   })).max(300).default([]),
 })

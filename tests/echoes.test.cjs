@@ -6,7 +6,7 @@ const { join } = require("node:path")
 const ts = require("typescript")
 
 const output = mkdtempSync(join(tmpdir(), "echoes-tests-"))
-const program = ts.createProgram(["lib/echoes/types.ts", "lib/echoes/era.ts", "lib/echoes/feedback.ts", "lib/echoes/verified.ts", "lib/echoes/year-facts.ts"], { outDir: output, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, skipLibCheck: true })
+const program = ts.createProgram(["lib/echoes/types.ts", "lib/echoes/era.ts", "lib/echoes/feedback.ts", "lib/echoes/verified.ts", "lib/echoes/year-facts.ts", "lib/echoes/note.ts"], { outDir: output, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, skipLibCheck: true })
 const diagnostics = ts.getPreEmitDiagnostics(program)
 assert.equal(diagnostics.length, 0, diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, " ")).join("\n"))
 program.emit()
@@ -16,6 +16,7 @@ const { eraWindow, selectForCoverage } = require(join(output, "era.js"))
 const { mergeFeedback, exclusionsFor } = require(join(output, "feedback.js"))
 const { dropUnresolvedItems } = require(join(output, "verified.js"))
 const { retainEraVerifiedItems, yearEvidenceFor } = require(join(output, "year-facts.js"))
+const { draftNoteFromFacts } = require(join(output, "note.js"))
 
 test("reminiscence era is ages 13 through 25", () => assert.deepEqual(eraWindow(1942), { from: 1955, to: 1967 }))
 
@@ -53,4 +54,11 @@ test("every retained item carries independent year evidence", () => {
   const output = retainEraVerifiedItems([{ entityId: "one", name: "Example", type: "urn:entity:artist" }], new Map([["one", evidence]]))
   assert.equal(output.length, 1)
   assert.deepEqual(output[0].yearEvidence, { year: 1964, source: "MusicBrainz", residentIds: ["marie"] })
+})
+
+test("session-note draft is grounded in recorded taps", () => {
+  const note = draftNoteFromFacts({ resident: { nickname: "M" }, items: [{ entityId: "one", name: "A familiar song" }], feedback: [{ residentId: "M", entityId: "one", status: "sparked" }], engagement: 3 })
+  assert.match(note, /A familiar song: sparked/)
+  assert.match(note, /3\/3/)
+  assert.doesNotMatch(note, /treatment|agitation|cognition/i)
 })

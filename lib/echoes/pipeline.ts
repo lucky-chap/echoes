@@ -1,7 +1,7 @@
 import { eraWindow, selectForCoverage, sharedEraWindow } from "./era"
 import { exclusionsFor } from "./feedback"
 import { EchoesQlooClient, resolveLovedThings } from "./qloo"
-import type { EchoesEntity, EchoesEntityType, FeedbackRecord, KitItem, ResidentInput, SessionKit } from "./types"
+import type { AgentTrace, EchoesEntity, EchoesEntityType, FeedbackRecord, KitItem, ResidentInput, SessionKit } from "./types"
 import { dropUnresolvedItems } from "./verified"
 import { retainEraVerifiedItems, verifyYearFact } from "./year-facts"
 
@@ -37,6 +37,7 @@ export async function generateSessionKit(input: {
 }) {
   const client = new EchoesQlooClient()
   const { residents, feedback } = input
+  const trace = (tool: AgentTrace["tool"], summary: string): AgentTrace => ({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), tool, summary })
   const era = sharedEraWindow(residents)
   const perResident = await Promise.all(residents.map(async (resident) => {
     const resolved = await resolveLovedThings(client, resident)
@@ -72,6 +73,7 @@ export async function generateSessionKit(input: {
     }))
     return { resident, candidates, note: null }
   }))
+  const resolvedCount = perResident.reduce((total, result) => total + result.candidates.length, 0)
 
   const allCandidateEntities = dropUnresolvedItems(
     perResident.flatMap((result) => result.candidates.map((item) => ({
@@ -134,6 +136,15 @@ export async function generateSessionKit(input: {
     },
     coverage: { percent: selection.percent, servedResidentIds: selection.servedResidentIds, underservedNames },
     notes,
+    agentTrace: [
+      trace("memory_read", `Read ${feedback.length} saved response${feedback.length === 1 ? "" : "s"} for the selected people.`),
+      trace("qloo_search", `Resolved anchors and expanded ${resolvedCount} Qloo candidates.`),
+      trace("qloo_insights", `Ranked candidates against each person's verified interests and safeguards.`),
+      trace("safety_filter", `Applied ${feedback.filter((item) => item.status === "distressed").length} saved exclusion${feedback.filter((item) => item.status === "distressed").length === 1 ? "" : "s"} and sensitivity filters.`),
+      trace("era_verify", `Kept ${verifiedCandidates.length} independently dated candidate${verifiedCandidates.length === 1 ? "" : "s"}; dropped ${allCandidates.length - verifiedCandidates.length} without a matching era fact.`),
+      trace("qloo_score", `Scored the verified candidate pool for ${residents.length === 1 ? "one person" : `${residents.length} people`}.`),
+      trace("group_optimizer", residents.length > 1 ? `Selected ${selection.items.length} items with ${selection.percent}% group coverage.` : `Selected ${selection.items.length} tailored item${selection.items.length === 1 ? "" : "s"}.`),
+    ],
   }
   return kit
 }

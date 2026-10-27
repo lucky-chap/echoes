@@ -30,7 +30,14 @@ export interface ResidentInput {
 export interface FeedbackRecord {
   residentId: string
   entityId: string
-  status: "sparked" | "distressed"
+  status: "sparked" | "neutral" | "distressed"
+}
+
+export interface AgentTrace {
+  id: string
+  createdAt: string
+  tool: "qloo_search" | "qloo_insights" | "qloo_score" | "era_verify" | "safety_filter" | "group_optimizer" | "memory_read" | "memory_write" | "note_writer"
+  summary: string
 }
 
 export interface KitItem {
@@ -58,4 +65,24 @@ export interface SessionKit {
   aboutMe: { title: string; details: string[]; opening: string }
   coverage: { percent: number; servedResidentIds: string[]; underservedNames: string[] }
   notes: string[]
+  agentTrace: AgentTrace[]
+}
+
+export interface SessionRecord {
+  id: string
+  createdAt: string
+  kit: SessionKit
+  feedback: FeedbackRecord[]
+  engagement: 1 | 2 | 3 | null
+  noteDraft: string | null
+}
+
+export interface EchoesWorkspace {
+  version: 1
+  secret: string
+  mode: "team" | "family"
+  residents: ResidentInput[]
+  feedback: FeedbackRecord[]
+  sessions: SessionRecord[]
+  traces: AgentTrace[]
 }

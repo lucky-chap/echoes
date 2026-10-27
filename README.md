@@ -17,6 +17,9 @@ Set this server-only variable in `.env.local`:
 ```env
 QLOO_API_KEY=your_key
 QLOO_BASE_URL=https://hackathon.api.qloo.com
+TMDB_API_KEY=your_tmdb_key
+# Optional, used only for structured intake and staff-review note prose
+GROQ_API_KEY=your_groq_key
 ```
 
 Open `http://localhost:3000`. The app includes three demo profiles (Ghana, Japan, and Spain). Use a deployed environment variable for the hosted demo; never use a `NEXT_PUBLIC_` prefix for the Qloo key.
@@ -29,6 +32,12 @@ Open `http://localhost:3000`. The app includes three demo profiles (Ghana, Japan
 4. Each displayed artist is independently checked against a MusicBrainz release year; each displayed film/TV item is independently checked against TMDB. An item without an evidence year in at least one matched resident's window is dropped.
 5. For groups, Echoes re-scores the shared candidate pool per person, then selects a compact set that maximizes coverage.
 6. “Sparked response” feedback becomes a future seed and “not for us” becomes a browser-persisted resident-specific exclusion. Only a nickname, entity ID, and feedback state live in the browser; Echoes stores no profile on its server.
+
+## Workspace and live sessions
+
+Each browser receives a secret-link workspace fragment. It persists nicknames, kits, feedback, and agent traces across reloads in that browser; **it is not a shared or cross-device database**. The footer’s delete-everything action clears every Echoes workspace from that browser.
+
+The live mode is deliberately low-tap: one item at a time, sparked/neutral/not-for-us responses, a three-point observed-engagement/pleasant-moments check, and a “Draft for staff review” note. Echoes is activity support for connection and pleasant moments, not medical advice or treatment; follow the person’s care plan.
 
 ```mermaid
 flowchart LR
