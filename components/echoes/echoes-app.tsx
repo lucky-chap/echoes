@@ -12,7 +12,9 @@ const blankResident = (): ResidentInput => ({
 })
 
 function commaList(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean)
+  // Keep spaces while a caregiver types (for example, "The Beatles").
+  // Values are normalized only at submit time.
+  return value.split(",")
 }
 
 export default function EchoesApp() {
@@ -37,7 +39,12 @@ export default function EchoesApp() {
   const createKit = async () => {
     setLoading(true); setError(""); setKit(null)
     try {
-      const response = await fetch("/api/echoes/kit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ residents, feedback }) })
+      const normalizedResidents = residents.map((resident) => ({
+        ...resident,
+        lovedThings: resident.lovedThings.map((item) => item.trim()).filter(Boolean),
+        sensitivities: resident.sensitivities.map((item) => item.trim()).filter(Boolean),
+      }))
+      const response = await fetch("/api/echoes/kit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ residents: normalizedResidents, feedback }) })
       const payload = await response.json()
       if (!response.ok) throw Error(payload.error || "Could not prepare a session kit.")
       setKit(payload.kit)
