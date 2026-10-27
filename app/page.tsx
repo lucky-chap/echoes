@@ -1,4 +1,3 @@
-import Worldlings from "@/components/world/worldlings"
-export default function Page() {
-  return <Worldlings />
-}
+import EchoesApp from "@/components/echoes/echoes-app"
+
+export default function Page() { return <EchoesApp /> }

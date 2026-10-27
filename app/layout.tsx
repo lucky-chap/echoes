@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
 import "./globals.css"
 export const metadata: Metadata = {
-  title: "Worldlings — Welcome to Littlehaven",
-  description:
-    "A cozy pixel-art town. Three neighbors, small moments, and a world of possibilities. An original local simulation demo.",
+  title: "Echoes — familiar moments, thoughtfully prepared",
+  description: "A Qloo-powered reminiscence-session kit generator for activity support.",
 }
 export default function RootLayout({
   children,
