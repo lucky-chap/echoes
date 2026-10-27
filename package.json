@@ -10,7 +10,8 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --test-isolation=none tests/*.test.cjs"
+    "test": "node --test --test-isolation=none tests/*.test.cjs",
+    "qloo:smoke": "node scripts/qloo-smoke.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
