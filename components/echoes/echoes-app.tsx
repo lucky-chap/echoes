@@ -77,8 +77,8 @@ export default function EchoesApp() {
           <label>Grew up in<input value={resident.hometown} onChange={(event) => update(index, { hometown: event.target.value })} placeholder="City or region" /></label>
           <label>Country<input value={resident.country} onChange={(event) => update(index, { country: event.target.value })} placeholder="Country" /></label>
           <label>Preferred language<input value={resident.language} onChange={(event) => update(index, { language: event.target.value })} /></label>
-          <label className="wide">Loved things <span>1–3 artists, films, shows, books, or places</span><input value={resident.lovedThings.join(", ")} onChange={(event) => update(index, { lovedThings: commaList(event.target.value).slice(0, 3) })} placeholder="e.g. The Beatles, Roman Holiday" /></label>
-          <label className="wide">Please avoid <span>Optional, comma-separated</span><input value={resident.sensitivities.join(", ")} onChange={(event) => update(index, { sensitivities: commaList(event.target.value) })} placeholder="e.g. war, loss" /></label>
+          <label className="wide">Loved things <span>1–3 artists, films, shows, books, or places</span><input value={resident.lovedThings.join(",")} onChange={(event) => update(index, { lovedThings: commaList(event.target.value).slice(0, 3) })} placeholder="e.g. The Beatles, Roman Holiday" /></label>
+          <label className="wide">Please avoid <span>Optional, comma-separated</span><input value={resident.sensitivities.join(",")} onChange={(event) => update(index, { sensitivities: commaList(event.target.value) })} placeholder="e.g. war, loss" /></label>
         </fieldset>)}
         <div className="intake-footer"><button className="add-person" type="button" disabled={residents.length >= 12} onClick={() => setResidents((items) => [...items, blankResident()])}>+ Add another person</button><button className="primary" type="button" disabled={loading} onClick={createKit}>{loading ? "Finding verified touchstones…" : "Create a session kit →"}</button></div>
         {error && <p className="error" role="alert">{error}</p>}
