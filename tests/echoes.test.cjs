@@ -6,7 +6,7 @@ const { join } = require("node:path")
 const ts = require("typescript")
 
 const output = mkdtempSync(join(tmpdir(), "echoes-tests-"))
-const program = ts.createProgram(["lib/echoes/types.ts", "lib/echoes/era.ts", "lib/echoes/feedback.ts", "lib/echoes/verified.ts"], { outDir: output, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, skipLibCheck: true })
+const program = ts.createProgram(["lib/echoes/types.ts", "lib/echoes/era.ts", "lib/echoes/feedback.ts", "lib/echoes/verified.ts", "lib/echoes/year-facts.ts"], { outDir: output, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, skipLibCheck: true })
 const diagnostics = ts.getPreEmitDiagnostics(program)
 assert.equal(diagnostics.length, 0, diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, " ")).join("\n"))
 program.emit()
@@ -15,6 +15,7 @@ after(() => rmSync(output, { recursive: true, force: true }))
 const { eraWindow, selectForCoverage } = require(join(output, "era.js"))
 const { mergeFeedback, exclusionsFor } = require(join(output, "feedback.js"))
 const { dropUnresolvedItems } = require(join(output, "verified.js"))
+const { retainEraVerifiedItems, yearEvidenceFor } = require(join(output, "year-facts.js"))
 
 test("reminiscence era is ages 13 through 25", () => assert.deepEqual(eraWindow(1942), { from: 1955, to: 1967 }))
 
@@ -37,4 +38,19 @@ test("distressed feedback persists as a resident-specific exclusion", () => {
 
 test("unresolved entities are dropped before a kit can render", () => {
   assert.deepEqual(dropUnresolvedItems([{ entityId: "verified" }, { entityId: "" }, {}, { entityId: null }]), [{ entityId: "verified" }])
+})
+
+test("an item outside every reminiscence window is dropped", () => {
+  const residents = [{ id: "marie", birthYear: 1942 }]
+  assert.equal(yearEvidenceFor(1974, "MusicBrainz", residents), null)
+  const output = retainEraVerifiedItems([{ entityId: "one", name: "Example", type: "urn:entity:artist" }], new Map([["one", null]]))
+  assert.deepEqual(output, [])
+})
+
+test("every retained item carries independent year evidence", () => {
+  const residents = [{ id: "marie", birthYear: 1942 }]
+  const evidence = yearEvidenceFor(1964, "MusicBrainz", residents)
+  const output = retainEraVerifiedItems([{ entityId: "one", name: "Example", type: "urn:entity:artist" }], new Map([["one", evidence]]))
+  assert.equal(output.length, 1)
+  assert.deepEqual(output[0].yearEvidence, { year: 1964, source: "MusicBrainz", residentIds: ["marie"] })
 })

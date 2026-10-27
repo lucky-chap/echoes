@@ -3,6 +3,7 @@ import { exclusionsFor } from "./feedback"
 import { EchoesQlooClient, resolveLovedThings } from "./qloo"
 import type { EchoesEntity, EchoesEntityType, FeedbackRecord, KitItem, ResidentInput, SessionKit } from "./types"
 import { dropUnresolvedItems } from "./verified"
+import { retainEraVerifiedItems, verifyYearFact } from "./year-facts"
 
 const outputTypes: { type: EchoesEntityType; kind: KitItem["kind"] }[] = [
   { type: "urn:entity:artist", kind: "music" },
@@ -60,7 +61,7 @@ export async function generateSessionKit(input: {
         })
       } catch { return [] as EchoesEntity[] }
     })
-    const candidates = uniqueById((await Promise.all(requests)).flat()).map((entity): KitItem => ({
+    const candidates = uniqueById((await Promise.all(requests)).flat()).slice(0, 6).map((entity): Omit<KitItem, "yearEvidence"> => ({
       entityId: entity.entityId,
       name: entity.name,
       kind: kindFor(entity.type),
@@ -103,10 +104,18 @@ export async function generateSessionKit(input: {
     }))
   }))
 
-  const selection = selectForCoverage(allCandidates, residents.map((resident) => resident.id))
+  const evidence = new Map(await Promise.all(allCandidates.map(async (candidate) => [
+    candidate.entityId,
+    await verifyYearFact(candidate.name, candidate.type, residents),
+  ] as const)))
+  const verifiedCandidates = retainEraVerifiedItems(allCandidates, evidence).flatMap((candidate) => {
+    const matchedResidentIds = candidate.matchedResidentIds.filter((id) => candidate.yearEvidence.residentIds.includes(id))
+    return matchedResidentIds.length ? [{ ...candidate, matchedResidentIds }] : []
+  })
+  const selection = selectForCoverage(verifiedCandidates, residents.map((resident) => resident.id))
   const underservedNames = residents.filter((resident) => !selection.servedResidentIds.includes(resident.id)).map((resident) => resident.nickname)
   const notes = perResident.flatMap((result) => result.note ? [result.note] : [])
-  if (!selection.items.length) notes.push("Qloo could not return a verified set right now. Please try again shortly or adjust the loved things.")
+  if (!selection.items.length) notes.push("Echoes could not confirm an independently dated Qloo match in the reminiscence window. Try another loved thing or a little later.")
   if (underservedNames.length) notes.push(`Coverage note: ${underservedNames.join(", ")} may need a more tailored follow-up.`)
   const kit: SessionKit = {
     id: crypto.randomUUID(),

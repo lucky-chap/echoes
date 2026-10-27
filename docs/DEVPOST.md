@@ -14,7 +14,7 @@ Next.js 16 powers a server-only Qloo integration. `/search` resolves every input
 
 ## Qloo's role
 
-Qloo is the scoring, filtering, expansion, and learning engine. It is a hard gate: no unresolved item renders. Prose is intentionally bounded to verified names and caregiver-safe activity support; Echoes makes no clinical or treatment claims.
+Qloo is the scoring, filtering, expansion, and learning engine. It is a hard gate: no unresolved item renders. A second hard gate independently checks shown artists with MusicBrainz and film/TV with TMDB, retaining only a dated work in the reminiscence window. Prose is intentionally bounded to verified names and caregiver-safe activity support; Echoes makes no clinical or treatment claims.
 
 ## Challenges
 

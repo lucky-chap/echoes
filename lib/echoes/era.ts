@@ -12,17 +12,17 @@ export function sharedEraWindow(residents: ResidentInput[]) {
   }
 }
 
-export function selectForCoverage(
-  candidates: KitItem[],
+export function selectForCoverage<T extends Pick<KitItem, "matchedResidentIds" | "affinity">>(
+  candidates: T[],
   residentIds: string[],
   limit = 6
 ) {
   const available = [...candidates]
-  const selected: KitItem[] = []
+  const selected: T[] = []
   const served = new Set<string>()
   while (available.length && selected.length < limit) {
     available.sort((a, b) => {
-      const newCoverage = (item: KitItem) =>
+      const newCoverage = (item: T) =>
         item.matchedResidentIds.filter((id) => !served.has(id)).length
       return (
         newCoverage(b) - newCoverage(a) ||

@@ -12,12 +12,13 @@ export async function GET(request: Request) {
   }))
   const completed = kits.filter((kit): kit is NonNullable<typeof kit> => kit !== null)
   const itemCount = completed.reduce((total, kit) => total + kit.items.length, 0)
+  const inWindowItems = completed.reduce((total, kit) => total + kit.items.filter((item) => Boolean(item.yearEvidence)).length, 0)
   const result = {
     sampleProfiles: profiles.length,
     pipeline: {
       label: "Qloo pipeline",
       entityResolutionRate: itemCount ? 100 : 0,
-      eraWindowRate: itemCount ? 100 : 0,
+      eraWindowRate: itemCount ? Math.round((inWindowItems / itemCount) * 100) : 0,
       groupCoverage: completed.length ? Math.round(completed.reduce((total, kit) => total + kit.coverage.percent, 0) / completed.length) : 0,
       itemsMeasured: itemCount,
     },

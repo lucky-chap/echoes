@@ -25,9 +25,10 @@ Open `http://localhost:3000`. The app includes three demo profiles (Ghana, Japan
 
 1. `/search` resolves each loved thing to a Qloo entity ID. Unresolved inputs are dropped.
 2. `/v2/tags` resolves optional sensitivities into valid exclusion tags.
-3. `/v2/insights` expands and ranks music, films, TV, books, and places from the ages 13–25 reminiscence window, with demographic, location, familiarity, safety, and exclusion inputs.
-4. For groups, Echoes re-scores the shared candidate pool per person, then selects a compact set that maximizes coverage.
-5. “Sparked response” feedback becomes a future seed and “not for us” becomes a browser-persisted resident-specific exclusion. Only a nickname, entity ID, and feedback state live in the browser; Echoes stores no profile on its server.
+3. `/v2/insights` expands and ranks candidate music, films, TV, books, and places from the ages 13–25 reminiscence window, with demographic, location, familiarity, safety, and exclusion inputs.
+4. Each displayed artist is independently checked against a MusicBrainz release year; each displayed film/TV item is independently checked against TMDB. An item without an evidence year in at least one matched resident's window is dropped.
+5. For groups, Echoes re-scores the shared candidate pool per person, then selects a compact set that maximizes coverage.
+6. “Sparked response” feedback becomes a future seed and “not for us” becomes a browser-persisted resident-specific exclusion. Only a nickname, entity ID, and feedback state live in the browser; Echoes stores no profile on its server.
 
 ```mermaid
 flowchart LR

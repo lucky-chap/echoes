@@ -41,6 +41,11 @@ export interface KitItem {
   whyItFits: string[]
   matchedResidentIds: string[]
   affinity: number | null
+  yearEvidence: {
+    year: number
+    source: "MusicBrainz" | "TMDB"
+    residentIds: string[]
+  }
 }
 
 export interface SessionKit {
