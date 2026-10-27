@@ -82,17 +82,19 @@ export default function EchoesApp() {
 
   return <div className="echoes-shell">
     <header className="echoes-header">
+      <nav className="primary-nav"><a href="#how-it-works">How it works</a><Link href="/eval">Evidence</Link></nav>
       <Link className="echoes-logo" href="/"><span aria-hidden>✦</span> echoes</Link>
-      <nav><a href="#how-it-works">How it works</a><Link href="/eval">Evaluation</Link></nav>
-      <p>Activity support, not treatment</p>
+      <p>Caregiver edition</p>
     </header>
     <main>
       <section className="hero">
-        <div><p className="eyebrow">REMINISCENCE, GENTLY PREPARED</p><h1>Start with what<br /><em>still feels familiar.</em></h1><p className="hero-copy">Echoes turns a few remembered favorites into a considerate, 30-minute activity-support session—grounded in the cultural world of a person’s younger years.</p></div>
+        <div className="hero-doodles" aria-hidden="true"><i className="doodle-cloud one" /><i className="doodle-star two">✦</i><i className="doodle-heart three">♡</i><i className="doodle-spark four">✳</i><i className="doodle-cloud five" /><i className="doodle-swoop six" /></div>
+        <div className="hero-content"><p className="eyebrow">REMINISCENCE, GENTLY PREPARED</p><h1>A little more <em>familiar.</em><br />A little more together.</h1><p className="hero-copy">Plan a thoughtful moment around the music, stories, and places that still feel like home.</p><div className="hero-cta"><a href="#intake" className="primary">Create a session kit <span>→</span></a><p><b>For activity teams & families</b><br />Built for connection, not treatment</p></div></div>
         <aside className="hero-note"><span>30 min</span><strong>A small shared moment</strong><p>Verified cultural touchstones, conversation starters, and room to follow their lead.</p></aside>
+        <div className="hero-ground" aria-hidden="true"><span>⌁</span><span>⌁</span><span>⌁</span></div>
       </section>
       {kit && live && <LiveSession kit={kit} residents={residents} feedback={feedback} onFeedback={(record) => recordFeedback(record.residentId, record.entityId, record.status)} onClose={() => setLive(false)} />}
-      {!kit ? <section className="intake card">
+      {!kit ? <section className="intake card" id="intake">
         <div className="section-title"><div><p className="eyebrow">01 / INTAKE</p><h2>Who are we planning for?</h2></div><div className="demo-actions"><button type="button" onClick={() => loadDemo("single")}>Try a demo</button><button type="button" onClick={() => loadDemo("group")}>Try group demo</button></div></div>
         <p className="quiet">Use a first name or nickname only. This private workspace stays in this browser and can be cleared at any time.</p>
         <div className="note-intake"><label>Paste a memory or handover note <textarea value={intakeNote} onChange={(event) => setIntakeNote(event.target.value)} placeholder="For example: Sam was born in 1942 in Accra, loved ABBA, and prefers to avoid war stories." /></label><button type="button" className="secondary" disabled={extracting || intakeNote.trim().length < 8} onClick={extractNote}>{extracting ? "Reading note…" : "Extract details"}</button></div>
