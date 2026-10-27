@@ -10,6 +10,8 @@ import { quietScene } from "@/lib/world/living/fallback"
 import { planScene } from "@/lib/world/living/planner"
 import type { SceneBundle, EncounterMode } from "@/lib/world/living/types"
 import { validateSnapshot } from "@/lib/world/living/validation"
+import { projectNextWorld, ScenePrefetch } from "@/lib/world/living/prefetch"
+import type { Snapshot } from "@/lib/world/living/types"
 import { type Situation } from "@/lib/world/profiles"
 import {
   WorldAudio,
@@ -17,6 +19,8 @@ import {
   type AudioSettings,
 } from "@/lib/world/audio/engine"
 export function useWorld() {
+  const prefetch = useRef(new ScenePrefetch())
+  const prefetchedRound = useRef(-1)
   const [sim, setSim] = useState(() => idleSimulation())
   const [paused, setPaused] = useState(false),
     [hidden, setHidden] = useState(false),
@@ -71,6 +75,7 @@ export function useWorld() {
   }
   useEffect(() => {
     const lifecycle = request
+    const speculative = prefetch.current
     const onVisibility = () => {
       const value = document.hidden
       if (value) {
@@ -87,6 +92,7 @@ export function useWorld() {
     return () => {
       document.removeEventListener("visibilitychange", onVisibility)
       lifecycle.current++
+      speculative.clear()
       busy.current = false
       audio.current?.dispose()
       audio.current = null
@@ -138,6 +144,40 @@ export function useWorld() {
   useEffect(() => {
     if (sim.phase === "deciding") audio.current?.cue("decision")
   }, [sim.phase, sim.round])
+  const fetchScene = useCallback(
+    async (world: Snapshot, signal?: AbortSignal) => {
+      const response = await fetch("/api/world/scene", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(world),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
+          : AbortSignal.timeout(60000),
+      })
+      if (!response.ok)
+        throw Error((await response.json()).error || "Scene unavailable")
+      return (await response.json()) as SceneBundle
+    },
+    []
+  )
+  useEffect(() => {
+    if (
+      paused ||
+      hidden ||
+      loading ||
+      !sessionReady.current ||
+      sim.phase !== "proposing" ||
+      prefetchedRound.current === sim.round
+    )
+      return
+    const timer = window.setTimeout(() => {
+      const world = projectNextWorld(latest.current)
+      if (!world) return
+      prefetchedRound.current = sim.round
+      prefetch.current.prepare(world, fetchScene)
+    }, 1700)
+    return () => window.clearTimeout(timer)
+  }, [sim.phase, sim.round, paused, hidden, loading, fetchScene])
   const run = useCallback(
     async (freshSession = false) => {
       if (busy.current) return
@@ -151,6 +191,7 @@ export function useWorld() {
       try {
         // Also migrates snapshots created before Qloo metadata was bounded.
         world = validateSnapshot(world)
+        if (freshSession) prefetch.current.clear()
         if (freshSession || !sessionReady.current) {
           const response = await fetch("/api/world/session", {
             method: "POST",
@@ -160,15 +201,11 @@ export function useWorld() {
             throw Error((await response.json()).error || "Session unavailable")
           sessionReady.current = true
         }
-        const response = await fetch("/api/world/scene", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(world),
-          signal: AbortSignal.timeout(45000),
-        })
-        if (!response.ok)
-          throw Error((await response.json()).error || "Scene unavailable")
-        const bundle: SceneBundle = await response.json()
+        const cached = await prefetch.current.consume(world)
+        if (token !== request.current) return
+        const expiredWait = cached?.diagnostics.llm === "Waiting" &&
+          (cached.diagnostics.retryAt ?? Infinity) <= Date.now()
+        const bundle = cached && !expiredWait ? cached : await fetchScene(world)
         if (token === request.current)
           setSim(beginLiving({ ...latest.current, world }, bundle))
       } catch (e) {
@@ -222,17 +259,10 @@ export function useWorld() {
         }
       }
     },
-    [enableAudio]
+    [enableAudio, fetchScene]
   )
   useEffect(() => {
-    if (
-      sim.phase !== "finished" ||
-      paused ||
-      hidden ||
-      loading ||
-      sim.world.completed >= checkpoint
-    )
-      return
+    if (sim.phase !== "finished" || paused || hidden || loading) return
     const timer = setTimeout(() => void run(), 1500)
     return () => clearTimeout(timer)
   }, [sim.phase, sim.world.completed, paused, hidden, loading, checkpoint, run])
@@ -263,9 +293,12 @@ export function useWorld() {
   function changeSituation(situation: Situation) {
     if (busy.current || !["idle", "finished"].includes(latest.current.phase))
       return
+    prefetch.current.clear()
     setSim((s) => ({ ...s, situation, world: { ...s.world, situation } }))
   }
   function reset() {
+    prefetch.current.clear()
+    prefetchedRound.current = -1
     request.current++
     setCheckpoint(0)
     busy.current = false
@@ -294,6 +327,7 @@ export function useWorld() {
     start,
     changeSituation,
     changeEncounter: (encounter: EncounterMode) => {
+      prefetch.current.clear()
       if (!busy.current && ["idle", "finished"].includes(latest.current.phase))
         setSim((s) => ({ ...s, world: { ...s.world, encounter } }))
     },

@@ -1,6 +1,7 @@
 import { squareOccupants } from "./presence"
 import {
   destinations,
+  destination,
   residents,
   type DestinationId,
   type ResidentId,
@@ -55,6 +56,7 @@ export function newWorld(): Snapshot {
     discoveries: [],
     socialMemories: [],
     gatherings: [],
+    pendingVisits: [],
   }
 }
 export function seeded(seed: number, salt: number) {
@@ -224,6 +226,54 @@ export function scoreDestinations(
   )
 }
 export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
+  const visit = world.pendingVisits?.[0]
+  if (visit) {
+    const names = visit.participants.map(
+      (id) => residents.find((r) => r.id === id)!.name
+    )
+    const choices = Object.fromEntries(
+      world.agents.map((a) => [
+        a.id,
+        visit.participants.includes(a.id)
+          ? visit.location
+          : destinations.some((d) => d.id === a.location)
+            ? a.location
+            : (a.recentVisits[0] ?? "cafe"),
+      ])
+    ) as Record<ResidentId, DestinationId>
+    return {
+      activityVisit: true,
+      number: world.completed + 1,
+      initialParticipants: [...visit.participants],
+      participants: [...visit.participants],
+      arrival: null,
+      destinations: choices,
+      scores: scoreDestinations(world, [], null),
+      incident: null,
+      culturalDecision: null,
+      topic: `Visit ${world.completed + 1}: ${names.join(" and ")} at ${destination(visit.location).name}; respond to the activity and the supplied recent experiences.`,
+      summary: `${names.join(" and ")} ${names.length === 1 ? "takes a moment" : "catch up"} at ${destination(visit.location).name}.`,
+      sceneType:
+        visit.participants.length === 1
+          ? "personal_moment"
+          : "casual_encounter",
+      gathering: {
+        id: `visit-${world.completed + 1}`,
+        organizer: visit.participants[0],
+        invited: [...visit.participants],
+        responses: Object.fromEntries(
+          visit.participants.map((id) => [id, "accepted"])
+        ),
+        location: visit.location,
+        scheduledDay: world.day,
+        scheduledHour: world.hour,
+        timeoutHour: Math.min(23, world.hour + 2),
+        reason: "A conversation during the activity they actually arrived for.",
+        entityId: null,
+        status: "planned",
+      },
+    }
+  }
   const incident = chooseIncident(world),
     scores = scoreDestinations(world, signals, incident)
   const choices = Object.fromEntries(
@@ -330,11 +380,43 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
   if (culturalDecision?.destinationId)
     choices[culturalDecision.residentId] = culturalDecision.destinationId
 
-  // Scene zero is deliberately not an encounter lottery.  It is the one
-  // shared start-of-day moment, persisted by `completed` so a restored world
-  // never plays it again after it has finished.
+  // A due commitment always wins over a new opportunity.  This is the small
+  // piece of state that lets a proposal in one scene become a real meeting.
+  const morningAssembly = world.hour === 9
+  const eveningWrapUp = world.hour >= 19
+  const due = (morningAssembly ? [] : world.gatherings)
+    .filter(
+      (g) =>
+        g.status === "planned" &&
+        (g.scheduledDay < world.day ||
+          (g.scheduledDay === world.day && g.scheduledHour <= world.hour))
+    )
+    .toSorted(
+      (a, b) =>
+        a.scheduledDay - b.scheduledDay || a.scheduledHour - b.scheduledHour
+    )[0]
+  // Scene zero is deliberately not an encounter lottery. It is the one
+  // shared start-of-day moment, persisted by `completed` so restores cannot replay it.
   const opening = world.completed === 0
-  const scheduledTrio = opening || world.completed === 2
+  const socialNeed =
+    world.agents.reduce((sum, a) => sum + (100 - a.social), 0) / 3
+  const relationshipNeed =
+    world.agents.reduce(
+      (sum, a) =>
+        sum +
+        Object.values(a.relationships)
+          .filter((_, i) => residents[i].id !== a.id)
+          .reduce((x, y) => x + (60 - y), 0),
+      0
+    ) / 6
+  const scheduledTrio =
+    morningAssembly ||
+    eveningWrapUp ||
+    world.completed === 2 ||
+    world.situation === "performance" ||
+    (world.agents.some((a) => a.social > 72) &&
+      relationshipNeed > 8 &&
+      seeded(world.seed, world.completed * 59) > 0.38)
   const culturalInvite =
     culturalDecision &&
     world.completed % 3 === 0 &&
@@ -357,31 +439,66 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
     : culturalInvite
       ? [culturalDecision.residentId, culturalPartner!]
       : []
-  let gathering =
-    scheduledTrio || culturalInvite
+  const sharedVenue =
+    culturalDecision?.destinationId ??
+    (world.situation === "rain" ? "cafe" : socialNeed > 58 ? "music" : "museum")
+  let gathering: import("./types").Gathering | null =
+    due ??
+    (scheduledTrio || culturalInvite
       ? {
           id: `gathering-${world.completed + 1}`,
           organizer: culturalInvite
             ? culturalDecision!.residentId
             : ("luna" as const),
           invited,
-          responses: Object.fromEntries(invited.map((id) => [id, "accepted"])),
-          location: "square" as const,
+          responses: Object.fromEntries(
+            invited.map((id, index) => {
+              if (
+                id === (culturalInvite ? culturalDecision!.residentId : "luna")
+              )
+                return [id, "accepted"]
+              const roll = seeded(world.seed, world.completed * 71 + index * 17)
+              const agent = world.agents.find((a) => a.id === id)!
+              return [
+                id,
+                opening ||
+                world.completed === 2 ||
+                agent.energy < 22 ||
+                (agent.social > 82 && roll < 0.28)
+                  ? agent.energy < 22
+                    ? "declined"
+                    : "accepted"
+                  : roll < 0.18
+                    ? "late"
+                    : "accepted",
+              ]
+            })
+          ),
+          location:
+            morningAssembly || eveningWrapUp
+              ? ("square" as const)
+              : sharedVenue,
           scheduledDay: world.day,
           scheduledHour: world.hour,
-          reason: opening
-            ? "The three neighbors begin their day together in the town square."
-            : culturalInvite
-            ? `${residents.find((resident) => resident.id === culturalDecision!.residentId)!.name} wants to share the verified discovery ${culturalDecision!.entityName}.`
-            : "A recurring public town-square gathering.",
+          reason: morningAssembly
+            ? "Morning assembly: the neighbors make their plans before the day begins."
+            : eveningWrapUp
+              ? "Evening wrap-up: the neighbors return to the square and reflect on the day."
+              : culturalInvite
+                ? `${residents.find((resident) => resident.id === culturalDecision!.residentId)!.name} wants to share the verified discovery ${culturalDecision!.entityName}.`
+                : "A neighbor-led plan to spend time together.",
           entityId: culturalInvite ? culturalDecision!.entityId : null,
           status: "planned" as const,
           timeoutHour: Math.min(23, world.hour + 2),
         }
-      : null
+      : null)
   let initialParticipants: ResidentId[] = gathering
-    ? [...gathering.invited]
+    ? gathering.invited.filter((id) => gathering!.responses[id] === "accepted")
     : [...ranked[0].group]
+  if (gathering && initialParticipants.length < 2) {
+    gathering.status = "cancelled"
+    initialParticipants = [...ranked[0].group]
+  }
   const mode = world.encounter ?? "auto"
   // Developer encounter controls apply after the deterministic opening only.
   if (!opening) {
@@ -390,9 +507,16 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
     if (mode === "trio") initialParticipants = residents.map((r) => r.id)
     if (mode === "solo") initialParticipants = ["luna"]
   }
-  const candidate = opening ? null : world.agents.find(
-    (a) => !initialParticipants.includes(a.id) && a.energy > 25 && a.social > 30
-  )
+  const candidate = gathering
+    ? world.agents.find((a) => gathering!.responses[a.id] === "late")
+    : opening
+      ? null
+      : world.agents.find(
+          (a) =>
+            !initialParticipants.includes(a.id) &&
+            a.energy > 25 &&
+            a.social > 30
+        )
   const joining =
     mode === "join"
       ? world.agents.find((a) => a.id === "luna")
@@ -428,6 +552,10 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
     if (candidates[0])
       for (const id of participants) choices[id] = candidates[0].id
   }
+  if (gathering)
+    for (const id of participants)
+      choices[id] =
+        gathering.location === "square" ? choices[id] : gathering.location
   // Angles describe current, observable circumstances, never fabricated past events.
   const topics = [
     ...(culturalDecision
@@ -464,15 +592,16 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
       ? ("personal_moment" as const)
       : opening
         ? ("group_hangout" as const)
-      : gathering && participants.length === 3
-        ? ("group_hangout" as const)
-        : culturalDecision && participants.includes(culturalDecision.residentId)
-          ? ("discovery" as const)
-          : groundedIncident
-            ? ("unexpected_event" as const)
-            : seeded(world.seed, world.completed * 11 + 17) > 0.82
-              ? ("disagreement" as const)
-              : ("casual_encounter" as const)
+        : gathering && participants.length === 3
+          ? ("group_hangout" as const)
+          : culturalDecision &&
+              participants.includes(culturalDecision.residentId)
+            ? ("discovery" as const)
+            : groundedIncident
+              ? ("unexpected_event" as const)
+              : seeded(world.seed, world.completed * 11 + 17) > 0.82
+                ? ("disagreement" as const)
+                : ("casual_encounter" as const)
   return {
     number: world.completed + 1,
     participants,
@@ -482,7 +611,7 @@ export function planScene(world: Snapshot, signals: CulturalSignal[]): Plan {
     initialParticipants,
     arrival,
     topic,
-    summary: `${initialParticipants.map((id) => residents.find((r) => r.id === id)!.name).join(" and ")} ${initialParticipants.length === 1 ? "takes a quiet moment" : "cross paths"} in the square.${arrival ? ` ${residents.find((r) => r.id === arrival.residentId)!.name} is on the way.` : ""}`,
+    summary: `${initialParticipants.map((id) => residents.find((r) => r.id === id)!.name).join(" and ")} ${morningAssembly ? "begin the day together" : eveningWrapUp ? "return to reflect on the day" : initialParticipants.length === 1 ? "takes a quiet moment" : "meet"} at ${gathering?.location === "square" ? "the town square" : gathering ? destination(gathering.location).name : destination(choices[initialParticipants[0]]).name}.${arrival ? ` ${residents.find((r) => r.id === arrival.residentId)!.name} is on the way.` : ""}`,
     sceneType,
     gathering,
     culturalDecision,

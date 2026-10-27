@@ -130,18 +130,19 @@ export interface SocialMemory {
   referencedEntityIds: string[]
   confirmedOutcome: string
 }
-export type InvitationResponse = "pending" | "accepted" | "declined"
+export type InvitationResponse = "pending" | "accepted" | "declined" | "late"
 export interface Gathering {
   id: string
   organizer: ResidentId
   invited: ResidentId[]
   responses: Partial<Record<ResidentId, InvitationResponse>>
-  location: "square"
+  location: DestinationId | "square"
   scheduledDay: number
   scheduledHour: number
   reason: string
   entityId: string | null
-  status: "planned" | "traveling" | "active" | "completed" | "cancelled"
+  status:
+    "planned" | "traveling" | "active" | "completed" | "cancelled" | "missed"
   timeoutHour: number
 }
 export const encounterModes = ["auto", "pair", "trio", "join", "solo"] as const
@@ -152,6 +153,7 @@ export interface RecentScene {
   lines: { speaker: ResidentId; text: string }[]
 }
 export interface Snapshot {
+  pendingVisits?: { location: DestinationId; participants: ResidentId[] }[]
   recentScenes?: RecentScene[]
   encounter?: EncounterMode
   version: 1
@@ -222,6 +224,7 @@ export interface Incident {
   destination: DestinationId | null
 }
 export interface Plan {
+  activityVisit?: boolean
   initialParticipants: ResidentId[]
   arrival: { residentId: ResidentId; beforeBeat: number } | null
   topic: string
@@ -276,7 +279,8 @@ export interface Scene {
   }[]
 }
 export interface SceneDiagnostics {
-  llm: "Groq Live" | "Fallback" | "Waiting"
+  llm: "Groq Live" | "Cerebras Live" | "Fallback" | "Waiting"
+  failoverReason?: string | null
   requestStatus: "success" | "failed" | "skipped" | "waiting"
   attempts: number
   repetition: string

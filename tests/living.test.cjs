@@ -15,6 +15,9 @@ const program = ts.createProgram(
     "lib/world/server/groq.ts",
     "lib/world/server/origin.ts",
     "lib/world/server/generation.ts",
+    "lib/world/server/rate-budget.ts",
+    "lib/world/server/dialogue-service.ts",
+    "lib/world/living/prefetch.ts",
   ],
   {
     outDir: output,
@@ -51,7 +54,14 @@ const { idleLiving, beginLiving, advanceLiving } = require(
 )
 const { routeToDestination } = require(join(output, "movement.js"))
 const quota = require(join(output, "server/quota.js"))
+const { SceneRateBudget } = require(join(output, "server/rate-budget.js"))
 const { sceneFixture } = require("./scene-fixture.cjs")
+const { ScenePrefetch, projectNextWorld, snapshotKey } = require(
+  join(output, "living/prefetch.js")
+)
+const { generateBudgetedConversation, retryAfterSeconds } = require(
+  join(output, "server/dialogue-service.js")
+)
 const mockSignals = [
   ["mia", "Test Film", "movie", "mia-film"],
   ["kai", "Test Artist", "artist", "kai-artist"],
@@ -148,8 +158,11 @@ test("connected scenes split residents, visit every destination, advance days, p
   assert(split)
   assert.equal(visits.size, 3)
   assert(pairs.size >= 3)
-  assert.equal(state.world.day, 7)
-  assert.equal(state.world.hour, 9)
+  assert(
+    state.world.day >= 2,
+    "venue conversations must not prevent the day advancing"
+  )
+  assert([9, 14, 19].includes(state.world.hour))
 })
 test("memory and relationship suggestions commit only after their beats; large ticks equal small ticks", async () => {
   const initial = idleLiving()
@@ -358,6 +371,261 @@ test("durable server quotas count reservations, survive reloads, reject new-sess
     Object.assign(process.env, prior)
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test("prefetch projects exact completion without committing effects and reuses one in-flight request", async () => {
+  let state = beginLiving(idleLiving(), await bundle(newWorld()))
+  state = advanceLiving(state, state.duration)
+  const unchanged = structuredClone(state)
+  const projected = projectNextWorld(state)
+  assert.deepEqual(state, unchanged)
+  assert(projected)
+  let actual = state
+  for (let n = 0; n < 2000 && actual.phase !== "finished"; n++)
+    actual = advanceLiving(actual, 0.1)
+  assert.equal(snapshotKey(actual.world), snapshotKey(projected))
+  let resolve,
+    calls = 0
+  const future = await bundle(projected)
+  const cache = new ScenePrefetch()
+  const fetcher = () => {
+    calls++
+    return new Promise((done) => {
+      resolve = done
+    })
+  }
+  cache.prepare(projected, fetcher)
+  cache.prepare(projected, fetcher)
+  await Promise.resolve()
+  const result = cache.consume(actual.world)
+  assert.equal(calls, 1)
+  resolve(future)
+  assert.equal(await result, future)
+  assert.equal(await cache.consume(actual.world), null)
+})
+
+test("prefetch rejects changed state, reset, failed transport and non-live projections", async () => {
+  const world = newWorld()
+  const b = await bundle(world)
+  const cache = new ScenePrefetch()
+  let signal, resolve
+  cache.prepare(world, (_w, requestSignal) => {
+    signal = requestSignal
+    return Promise.resolve(b)
+  })
+  await Promise.resolve()
+  const changed = structuredClone(world)
+  changed.agents[0].relationships.kai--
+  assert.equal(
+    await cache.consume(changed),
+    null,
+    "same scene counter is not enough"
+  )
+  assert(signal.aborted)
+  cache.prepare(
+    world,
+    () =>
+      new Promise((done) => {
+        resolve = done
+      })
+  )
+  await Promise.resolve()
+  const pending = cache.consume(world)
+  cache.clear()
+  resolve(b)
+  assert.equal(
+    await pending,
+    null,
+    "reset invalidates even an ignored transport abort"
+  )
+  cache.prepare(world, async () => {
+    throw Error("offline")
+  })
+  assert.equal(await cache.consume(world), null)
+  b.scene = quietScene(b.plan)
+  b.diagnostics.llm = "Waiting"
+  assert.equal(projectNextWorld(beginLiving(idleLiving(), b)), null)
+})
+
+test("compact prompts bound context while validation still sees older repeated dialogue", async () => {
+  const { sceneRequest } = require(join(output, "server/groq.js"))
+  const world = newWorld()
+  const b = await bundle(world)
+  world.recentScenes = [0, 1, 2, 3].map((n) => ({
+    sceneId: `old-${n}`,
+    topic: `old topic ${n}`,
+    lines: Array.from({ length: 10 }, (_, i) => ({
+      speaker: "mia",
+      text: `An established line about the town from moment ${n} and detail ${i}.`,
+    })),
+  }))
+  const context = { world, plan: b.plan, signals: mockSignals }
+  const outgoing = sceneRequest(context)
+  const prompt = JSON.parse(outgoing.messages[1].content)
+  assert.equal(prompt.world.avoidRepeating.length, 10)
+  assert(!prompt.world.agents.some((a) => "memories" in a || "important" in a))
+  assert(!("recentByResident" in prompt.world))
+  assert.equal(outgoing.max_completion_tokens, 1600)
+  assert(
+    Buffer.byteLength(JSON.stringify(outgoing)) < 13000,
+    "complete bounded request includes schema and context"
+  )
+  b.scene.beats[0].dialogue = world.recentScenes[0].lines[0].text
+  assert.throws(
+    () =>
+      require(join(output, "living/dialogue.js")).validateDialogue(
+        b.scene,
+        context
+      ),
+    /repeated dialogue/
+  )
+})
+
+test("primary success avoids backup; 429 uses validated Cerebras, respecting isolated cooldowns and shared session cap", async () => {
+  const Groq = require("groq-sdk").default
+  const { GroqProvider } = require(join(output, "server/groq.js"))
+  const root = mkdtempSync(join(tmpdir(), "world-failover-"))
+  const prior = { ...process.env }
+  const nowFn = Date.now
+  let now = Date.now()
+  Date.now = () => now
+  try {
+    Object.assign(process.env, {
+      WORLDLINGS_QUOTA_DIR: root,
+      NODE_ENV: "test",
+      LLM_PROVIDER: "groq",
+      GROQ_API_KEY: "test-only",
+      GROQ_FREE_PLAN_CONFIRMED: "true",
+      GROQ_PLAN: "free",
+      CEREBRAS_BACKUP_ENABLED: "true",
+      CEREBRAS_API_KEY: "test-only",
+      MAX_LLM_CALLS_PER_SESSION: "4",
+      GROQ_DAILY_REQUEST_LIMIT: "100",
+      CEREBRAS_DAILY_REQUEST_LIMIT: "100",
+      GROQ_REQUESTS_PER_MINUTE: "25",
+      CEREBRAS_REQUESTS_PER_MINUTE: "25",
+      GROQ_TOKENS_PER_MINUTE: "100000",
+      CEREBRAS_TOKENS_PER_MINUTE: "100000",
+      GROQ_DAILY_TOKEN_LIMIT: "100000",
+      CEREBRAS_DAILY_TOKEN_LIMIT: "100000",
+    })
+    const world = newWorld(),
+      b = await bundle(world)
+    const context = { world, plan: b.plan, signals: mockSignals }
+    const id = quota.createSession()
+    let primaryStatus = 200,
+      invalidBackup = false
+    const called = []
+    const options = {
+      budget: new SceneRateBudget({ now: () => now }),
+      wait: async () => {
+        now += 1600
+      },
+      makeProvider: (kind) =>
+        new GroqProvider(
+          new Groq({
+            apiKey: "test-only",
+            maxRetries: 0,
+            fetch: async (_url, init) => {
+              called.push(kind)
+              const sent = JSON.parse(init.body)
+              assert.equal(sent.response_format.json_schema.strict, true)
+              if (kind === "groq" && primaryStatus !== 200)
+                return new Response(
+                  JSON.stringify({ error: { message: "limited" } }),
+                  { status: primaryStatus, headers: { "retry-after": "90" } }
+                )
+              const scene = structuredClone(b.scene)
+              if (invalidBackup)
+                scene.beats[0].references = ["invented:evidence"]
+              return Response.json({
+                choices: [
+                  {
+                    finish_reason: "stop",
+                    message: { content: JSON.stringify(scene) },
+                  },
+                ],
+                usage: { prompt_tokens: 500, completion_tokens: 300 },
+              })
+            },
+          }),
+          kind
+        ),
+    }
+    const first = await generateBudgetedConversation(id, context, options)
+    assert.equal(first.provider, "groq")
+    assert.deepEqual(called, ["groq"])
+    now += 2000
+    primaryStatus = 429
+    const second = await generateBudgetedConversation(id, context, options)
+    assert.equal(second.provider, "cerebras")
+    assert.equal(second.attempts, 2)
+    assert.equal(second.inputTokens, 500)
+    assert.match(second.failoverReason, /429/)
+    assert.deepEqual(called, ["groq", "groq", "cerebras"])
+    assert.equal(quota.sessionStatus(id).calls, 3)
+    const playback = advanceLiving(
+      beginLiving(idleLiving(), {
+        ...b,
+        scene: second.scene,
+        plan: second.plan,
+        diagnostics: { ...b.diagnostics, llm: "Cerebras Live" },
+      }),
+      1000
+    )
+    assert(playback.history.length > 0)
+    now += 2000
+    const third = await generateBudgetedConversation(id, context, options)
+    assert.equal(
+      third.provider,
+      "cerebras",
+      "Groq cooldown does not block backup"
+    )
+    assert.equal(
+      called.filter((kind) => kind === "groq").length,
+      2,
+      "no retry of rate-limited primary"
+    )
+    const capped = await generateBudgetedConversation(id, context, options)
+    assert.equal(capped.scene, null)
+    assert.match(capped.reason, /Session call limit/)
+    const another = quota.createSession()
+    invalidBackup = true
+    const rejected = await generateBudgetedConversation(
+      another,
+      context,
+      options
+    )
+    assert.equal(rejected.scene, null)
+    assert.match(rejected.reason, /unknown evidence/)
+    assert.equal(rejected.attempts, 1)
+    assert.equal(retryAfterSeconds("90", now), 90)
+    process.env.GROQ_PLAN = "developer"
+    process.env.GROQ_PAID_USAGE_CONFIRMED = "false"
+    assert.match(quota.liveUnavailable(), /Confirm paid/)
+    process.env.GROQ_PAID_USAGE_CONFIRMED = "true"
+    assert.equal(quota.liveUnavailable(), null)
+    assert.equal(
+      retryAfterSeconds(new Date(now + 60000).toUTCString(), now),
+      60
+    )
+  } finally {
+    Date.now = nowFn
+    for (const key of Object.keys(process.env))
+      if (!(key in prior)) delete process.env[key]
+    Object.assign(process.env, prior)
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("rolling scene budget cannot burst across a minute boundary", () => {
+  let now = 59999
+  const budget = new SceneRateBudget({ now: () => now })
+  for (let i = 0; i < 25; i++) assert(budget.charge(["mia", "kai", "luna"]))
+  now = 60001
+  assert.equal(budget.charge(["mia", "kai", "luna"]), null)
+  now = 120000
+  assert.equal(budget.charge(["mia"]), "mia")
 })
 
 test("official Groq SDK sends strict scene requests and rejects invalid output without retries", async () => {
@@ -622,6 +890,7 @@ test("early departure moves a tired resident while the other continues; departed
 test("automatic schedules retain pairs and make shared-event trio opportunities without a fixed rotation", () => {
   const world = newWorld()
   world.completed = 1
+  world.hour = 14
   world.situation = "performance"
   world.agents.forEach((a) => {
     a.social = 80
@@ -632,6 +901,249 @@ test("automatic schedules retain pairs and make shared-event trio opportunities 
   world.situation = "sunny"
   world.agents.forEach((a) => (a.social = 5))
   assert.equal(planScene(world, mockSignals).participants.length, 1)
+})
+
+test("square dispersal leads to an actual cafe pair conversation, with persisted causal action effects", async () => {
+  let state = idleLiving()
+  const opening = await bundle(state.world)
+  opening.plan.destinations = { mia: "cafe", kai: "cafe", luna: "museum" }
+  opening.plan.culturalDecision = null
+  state = advanceLiving(beginLiving(state, opening), 1000)
+  assert.equal(
+    state.world.hour,
+    9,
+    "finish venue visits before advancing the day's clock"
+  )
+  assert.deepEqual(state.world.pendingVisits, [
+    { location: "cafe", participants: ["mia", "kai"] },
+    { location: "museum", participants: ["luna"] },
+  ])
+  state.world = validateSnapshot(JSON.parse(JSON.stringify(state.world)))
+  const next = await bundle(state.world)
+  assert.equal(next.plan.activityVisit, true)
+  assert.equal(next.plan.gathering.location, "cafe")
+  assert.deepEqual(next.plan.participants, ["mia", "kai"])
+  next.scene.beats = [
+    [
+      "mia",
+      "I want to sketch while we're here. Will you sit with me?",
+      "sketch",
+    ],
+    ["kai", "All right. I'll sit here while you try it.", "sit"],
+    ["mia", "Keep still for a moment; I'm starting with your outline.", "talk"],
+    ["kai", "I'll give you a moment. This is quite restful.", "talk"],
+  ].map(([speaker, dialogue, action], index) => ({
+    speaker,
+    dialogue,
+    action,
+    emotion: "content",
+    targetLocation: null,
+    replyTo: index ? index - 1 : null,
+    references: [],
+  }))
+  next.scene.summary = "Mia sketches while Kai sits with her at The Daily Cup."
+  next.scene.suggestedMemoryUpdates = []
+  next.scene.suggestedRelationshipChanges = []
+  validateScene(next.scene, next.plan)
+  require(join(output, "living/dialogue.js")).validateDialogue(next.scene, {
+    world: state.world,
+    plan: next.plan,
+    signals: [],
+  })
+  const before = structuredClone(state.world)
+  let playing = beginLiving(state, next)
+  assert(
+    !playing.transits.mia && !playing.transits.kai,
+    "residents already at the cafe stay there"
+  )
+  assert.deepEqual(playing.world.agents[0].learned, before.agents[0].learned)
+  playing = advanceLiving(playing, playing.duration)
+  assert.equal(playing.speech.speaker, "mia")
+  assert.deepEqual(playing.present, ["mia", "kai"])
+  const away = structuredClone(playing)
+  away.positions[1] = [230, 210]
+  assert.throws(() => advanceLiving(away, away.duration), /Absent resident/)
+  playing = advanceLiving(playing, playing.duration)
+  assert.equal(
+    playing.world.agents[0].learned.art,
+    (before.agents[0].learned.art ?? 0) + 0.02
+  )
+  assert(
+    playing.world.agents[0].memories.some(
+      (m) => m.location === "cafe" && m.text.startsWith("Sketched")
+    )
+  )
+  const after = advanceLiving(playing, 1000)
+  const museumCulture = (w) =>
+    scoreDestinations(w, [], null).find(
+      (s) => s.residentId === "mia" && s.destinationId === "museum"
+    ).factors.culture
+  assert(
+    museumCulture(after.world) > museumCulture(before),
+    "practising art affects a later destination score"
+  )
+  assert.equal(
+    after.world.agents[0].relationships.kai,
+    before.agents[0].relationships.kai + 1
+  )
+  assert.equal(
+    after.world.agents[2].relationships.mia,
+    before.agents[2].relationships.mia,
+    "absent Luna receives no social credit"
+  )
+  assert.equal(after.world.socialMemories.at(-1).location, "cafe")
+  assert.deepEqual(after.world.pendingVisits, [
+    { location: "museum", participants: ["luna"] },
+  ])
+  const solo = await bundle(after.world)
+  assert.deepEqual(solo.plan.participants, ["luna"])
+  const finished = advanceLiving(beginLiving(after, solo), 1000)
+  assert.equal(finished.world.hour, 14)
+  assert.deepEqual(finished.world.pendingVisits, [])
+  assert.equal(planScene(finished.world, []).gathering.scheduledHour, 14)
+  validateSnapshot(finished.world)
+})
+
+test("unavailable venue speech stays silent and cannot fabricate action effects", async () => {
+  const state = idleLiving()
+  state.world.pendingVisits = [
+    { location: "cafe", participants: ["mia", "kai"] },
+  ]
+  const b = await bundle(state.world)
+  b.scene = quietScene(b.plan)
+  b.diagnostics.llm = "Fallback"
+  const result = advanceLiving(beginLiving(state, b), 1000)
+  assert.equal(result.history.length, 0)
+  assert.equal(result.world.socialMemories.length, 0)
+  assert.deepEqual(
+    result.world.agents.map((a) => a.learned),
+    [{}, {}, {}]
+  )
+  assert.equal(result.world.pendingVisits.length, 0)
+  assert.equal(result.world.hour, 14)
+})
+
+test("pending venue visits migrate and reject duplicate attendance and invented venues", () => {
+  const old = newWorld()
+  delete old.pendingVisits
+  assert.deepEqual(validateSnapshot(old).pendingVisits, [])
+  for (const visits of [
+    [{ location: "castle", participants: ["mia"] }],
+    [{ location: "cafe", participants: ["mia", "mia"] }],
+    [
+      { location: "cafe", participants: ["mia"] },
+      { location: "museum", participants: ["mia"] },
+    ],
+  ])
+    assert.throws(() => validateSnapshot({ ...old, pendingVisits: visits }))
+})
+
+test("a rate-limited venue visit reaches the cafe, preserves its roster, and can resume speech", async () => {
+  const state = idleLiving()
+  state.world.pendingVisits = [
+    { location: "cafe", participants: ["mia", "kai"] },
+  ]
+  const b = await bundle(state.world)
+  const waiting = structuredClone(b)
+  waiting.scene = quietScene(waiting.plan)
+  waiting.diagnostics.llm = "Waiting"
+  waiting.diagnostics.retryAt = Date.now() + 60000
+  let result = advanceLiving(beginLiving(state, waiting), 1000)
+  assert.equal(result.phase, "waiting")
+  assert.deepEqual(result.present, ["mia", "kai"])
+  assert.equal(result.world.agents[0].location, "cafe")
+  assert.notDeepEqual(result.positions[1], state.positions[1])
+  assert.equal(result.history.length, 0)
+  assert.deepEqual(result.world.pendingVisits, state.world.pendingVisits)
+  assert.equal(advanceLiving(result, 60), result)
+  result = advanceLiving(beginLiving(result, b), 1000)
+  assert(result.history.length > 0)
+  assert.equal(result.world.socialMemories.at(-1).location, "cafe")
+  assert.equal(result.world.pendingVisits.length, 0)
+})
+
+test("a ten-beat venue scene survives save and restore for the next request", async () => {
+  const state = idleLiving()
+  state.world.pendingVisits = [
+    { location: "cafe", participants: ["mia", "kai"] },
+  ]
+  const b = await bundle(state.world)
+  const lines = [
+    "Shall we sit for a moment?",
+    "Yes, I could use a rest.",
+    "I keep thinking about what to draw.",
+    "Try something small to start.",
+    "A little outline might be enough.",
+    "You can always add to it.",
+    "That makes it less daunting.",
+    "Take your time with it.",
+    "I'll stay here and give it a go.",
+    "I'll sit with you while you start.",
+  ]
+  b.scene.beats = lines.map((dialogue, i) => ({
+    speaker: i % 2 ? "kai" : "mia",
+    dialogue,
+    action: "talk",
+    emotion: "content",
+    targetLocation: null,
+    replyTo: i ? i - 1 : null,
+    references: [],
+  }))
+  b.scene.suggestedMemoryUpdates = []
+  b.scene.suggestedRelationshipChanges = []
+  validateScene(b.scene, b.plan)
+  const result = advanceLiving(beginLiving(state, b), 1000)
+  const restored = validateSnapshot(JSON.parse(JSON.stringify(result.world)))
+  assert.equal(restored.recentScenes.at(-1).lines.length, 10)
+  assert.doesNotThrow(() => planScene(restored, []))
+})
+
+test("per-resident scene budget stays below 6 each and 25 total per fake minute", () => {
+  let now = 0
+  const budget = new SceneRateBudget({ now: () => now })
+  for (let i = 0; i < 40; i++) budget.charge(["mia", "kai", "luna"])
+  const first = budget.snapshot()
+  assert.equal(first.total, 25)
+  assert(
+    first.residents.mia <= 6 &&
+      first.residents.kai <= 6 &&
+      first.residents.luna <= 6
+  )
+  now = 60000
+  assert.equal(budget.charge(["mia"]), "mia")
+  assert.equal(budget.snapshot().residents.mia, 1)
+})
+
+test("a due venue plan is honored with venue occupancy and a late arrival", async () => {
+  const world = newWorld()
+  world.hour = 14
+  world.gatherings.push({
+    id: "tomorrow-museum",
+    organizer: "mia",
+    invited: ["mia", "kai", "luna"],
+    responses: { mia: "accepted", kai: "accepted", luna: "late" },
+    location: "museum",
+    scheduledDay: world.day,
+    scheduledHour: world.hour,
+    reason: "A real follow-up plan.",
+    entityId: null,
+    status: "planned",
+    timeoutHour: 12,
+  })
+  const b = await bundle(world)
+  assert.equal(b.plan.gathering.location, "museum")
+  assert.deepEqual(b.plan.initialParticipants, ["mia", "kai"])
+  assert.equal(b.plan.arrival.residentId, "luna")
+  let state = beginLiving(idleLiving(), b)
+  state = advanceLiving(state, state.duration)
+  assert.deepEqual([...state.present].sort(), ["kai", "mia"])
+  assert.equal(
+    state.world.agents.find((a) => a.id === "mia").location,
+    "museum"
+  )
+  state = advanceLiving(state, 1000)
+  assert.equal(state.world.gatherings.at(-1).status, "completed")
+  assert.equal(state.world.socialMemories.at(-1).location, "museum")
 })
 
 test("the first two simulated days include a real three-resident planned gathering", async () => {
@@ -957,6 +1469,9 @@ test("three consecutive SDK fixture scenes keep a thread, distinct voices, endin
   state.world.encounter = "trio"
   let outgoing
   for (const exchange of exchanges) {
+    // This test exercises authored trio SDK replies. Venue rosters have their
+    // own attendance tests; do not feed trio prose to a solo/pair visit.
+    state.world.pendingVisits = []
     const b = await bundle(state.world)
     b.scene.beats = exchange.map(([speaker, dialogue], index) => ({
       speaker,
@@ -997,8 +1512,16 @@ test("three consecutive SDK fixture scenes keep a thread, distinct voices, endin
     assert(result.scene, result.failure?.message)
     const prompt = JSON.parse(outgoing.messages[1].content)
     assert.deepEqual(prompt.encounter.participants, ["mia", "kai", "luna"])
-    assert.deepEqual(prompt.world.recentDialogue, state.world.recentDialogue)
-    assert(prompt.world.recentDialogue.length <= 8)
+    assert(prompt.world.avoidRepeating.length <= 10)
+    assert(
+      prompt.world.avoidRepeating.every(
+        (line) =>
+          state.world.recentScenes.some((scene) =>
+            scene.lines.some((past) => past.text === line.text)
+          ) ||
+          state.world.recentDialogue.some((past) => past.text === line.text)
+      )
+    )
     assert(
       sceneTokenReservation(context) < 20000,
       "one scene remains within configured minute token reservation ceiling"

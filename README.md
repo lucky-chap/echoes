@@ -46,13 +46,63 @@ Memory, discoveries, taste changes, social memories, relationships, and complete
 
 ## Gatherings and dialogue
 
-Gatherings include an organizer, invitations and responses, a square location, scheduled simulation time, timeout, reason, optional Qloo entity, and lifecycle state. Residents walk over existing routes. The engine checks physical square occupancy before every line; absent residents cannot speak or receive social-memory updates. A compatible late arrival can join only after reaching the square.
+Gatherings include an organizer, invitations and responses, a town venue, scheduled simulation time, timeout, reason, optional Qloo entity, and lifecycle state. Residents walk over existing routes. The engine checks physical occupancy at the meeting venue before every line; absent residents cannot speak or receive social-memory updates. A compatible late arrival can join only after reaching that venue.
+
+After dispersal, arrivals at the café, music venue, and museum create bounded, persisted conversation opportunities. Shared visits take priority, including pairs; lone residents can have a short spoken thought. These conversations happen at the actual venue before the simulation clock advances. Each uses the normal Groq budget and validation; unavailable dialogue stays silent and is labelled in the UI.
+
+Completed sketching, dancing and sitting actions create factual memories, adjust energy, and add a small bounded art/music/quiet preference used by later destination scoring. Completed venue conversations reduce social need and modestly strengthen the attending residents' relationships. Unplayed actions and silent fallbacks cannot create these effects. These are local simulation preferences, never invented Qloo affinities or verified entities.
 
 Natural scheduling considers social need, relationships, energy, prior participants, physical overlap, cultural discoveries, and public events. A reliable all-three public gathering is scheduled by the third scene on day one, using the same invitation, walking, arrival, occupancy, and dialogue path as every other gathering. Independent destination choices continue after the meeting.
 
 The scene director supports casual encounters, group hangouts, disagreements, discovery scenes, unexpected events, and personal moments. Groq receives the exact roster, arrival boundary, moods, current goals, relationships, bounded relevant memories, real Qloo discoveries, and confirmed-fact IDs. It cannot authorize movement or directly mutate world state. Output is rejected for absent speakers, invalid actions, ungrounded callbacks, unknown evidence, repeated lines/sequences, bad attribution, or unsupported state changes. An outage produces a silent fallback while independent activities continue.
 
 ## Development diagnostics
+
+### Dialogue continuity and optional backup
+
+Each request returns a whole conversation (up to ten beats). Prompts include
+one compact evidence set and recent-line sample instead of repeated resident
+histories. Server validation still checks the entire bounded history.
+
+While a live scene plays, the client projects its deterministic completion and
+prefetches one next scene. It reuses that response only if the complete validated
+world matches the projection. Reset/context changes invalidate it; speculative
+calls still count against quotas. Prefetching does not pause movement or audio.
+
+Groq is the primary provider. To enable the optional Cerebras backup, set these
+server-only values in `.env.local` (do not overwrite existing credentials):
+
+```env
+CEREBRAS_BACKUP_ENABLED=true
+CEREBRAS_API_KEY=your_actual_key_here
+CEREBRAS_MODEL=qwen-3.8-27b
+CEREBRAS_DAILY_REQUEST_LIMIT=20
+CEREBRAS_REQUESTS_PER_MINUTE=2
+CEREBRAS_TOKENS_PER_MINUTE=20000
+CEREBRAS_DAILY_TOKEN_LIMIT=60000
+```
+
+Adjust those ceilings to your account's actual allowances before enabling it.
+The integration uses Cerebras' [structured output API](https://inference-docs.cerebras.ai/capabilities/structured-outputs)
+at the fixed `https://api.cerebras.ai/v1` endpoint. Backup prose passes exactly
+the same attendance, schema, grounding and repetition checks. Diagnostics show
+`Cerebras Live` when it supplies an accepted scene, plus the failover reason.
+Without configuration it makes no backup calls. With backup enabled there are
+at most two attempts: one primary and one backup. A 429 sets that provider's
+cooldown; it is not immediately retried. Both providers share the application
+budget (at most 25 requests in a rolling minute) and session call ceiling, with
+separate persistent provider request/token ceilings.
+
+`GROQ_PLAN=free` is the default. After upgrading your own Groq account and
+configuring its [spending cap](https://console.groq.com/docs/spend-limits), use
+`GROQ_PLAN=developer` and `GROQ_PAID_USAGE_CONFIRMED=true`; then set the existing
+`GROQ_*LIMIT` and per-minute settings below your actual account limits. This
+does not upgrade the account or raise ceilings automatically. The app caps
+requests at 25/minute even on Developer, and token ceilings remain configurable.
+`MAX_LLM_CALLS_PER_SESSION` defaults to 60; an existing explicit value of 10 in
+your local environment still wins. Restart the server after changing settings.
+
+All provider failover tests use isolated transports, not live paid requests.
 
 Expand **Cultural signals & developer inspection** to inspect:
 

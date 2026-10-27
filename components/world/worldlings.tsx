@@ -130,6 +130,23 @@ export default function Worldlings() {
       : null
   const agent = sim.world.agents[selected]
   const diagnostics = sim.bundle?.diagnostics
+  const qlooStatus =
+    diagnostics?.taste === "Qloo Live"
+      ? "Qloo live"
+      : diagnostics?.taste === "Qloo Cache"
+        ? "Qloo cached"
+        : diagnostics?.taste === "Qloo Error"
+          ? "Qloo unavailable"
+          : diagnostics?.taste === "Qloo Unavailable"
+            ? "Qloo not configured"
+            : "Qloo pending"
+  const qlooDetail =
+    diagnostics?.qloo.lastError ??
+    diagnostics?.tasteReason ??
+    "Qloo availability is checked whenever cultural signals are requested."
+  const todayPlans = sim.world.gatherings.filter(
+    (plan) => plan.scheduledDay === sim.world.day
+  )
   const logs = sim.logs
   useEffect(() => {
     const c = canvas.current?.getContext("2d")
@@ -317,12 +334,19 @@ export default function Worldlings() {
               )}
               {sim.phase === "completing" && winner && (
                 <div className="activity-banner">
-                  Everyone settles into their plans
+                  {diagnostics?.llm === "Fallback"
+                    ? "Dialogue unavailable · activities continue"
+                    : sim.bundle?.plan.activityVisit
+                      ? "A moment shared. Their experience stays with them."
+                      : "Arriving for their activities · venue conversations follow"}
                 </div>
               )}
               <div className="map-bottom">
                 <span>
-                  <span className="status-dot" /> {phaseNames[sim.phase]}
+                  <span className="status-dot" />{" "}
+                  {sim.bundle?.plan.activityVisit && sim.phase === "proposing"
+                    ? `Talking at ${destination(sim.bundle.plan.gathering!.location as "cafe" | "music" | "museum").name}`
+                    : phaseNames[sim.phase]}
                   {decided && winner
                     ? ` · ${residents[selected].name}: ${winner.name}`
                     : ""}
@@ -346,6 +370,15 @@ export default function Worldlings() {
                 <span className="provider-pill">
                   {diagnostics?.llm ?? "Not generated"} ·{" "}
                   {diagnostics?.taste ?? "Qloo not requested"}
+                </span>
+                <span
+                  className="provider-pill"
+                  role="status"
+                  data-testid="qloo-status"
+                  title={qlooDetail}
+                  aria-label={`${qlooStatus}. ${qlooDetail}`}
+                >
+                  {qlooStatus}
                 </span>
                 <button
                   className="icon-button"
@@ -520,7 +553,7 @@ export default function Worldlings() {
                         ·{" "}
                         {sim.transits[r.id]
                           ? "On the way"
-                          : sim.world.agents[i].goal}
+                          : sim.world.agents[i].currentActivity}
                       </span>
                     </span>
                     <ChevronRight size={14} />
@@ -632,6 +665,28 @@ export default function Worldlings() {
                   Recently: {sim.world.events.at(-1)}
                 </p>
               )}
+              <div className="proposal-list" aria-label="Today's commitments">
+                <strong>Today&apos;s plan</strong>
+                {todayPlans.length ? (
+                  todayPlans.slice(-3).map((plan) => (
+                    <div key={plan.id}>
+                      <strong>
+                        {String(plan.scheduledHour).padStart(2, "0")}:00
+                      </strong>
+                      <span>
+                        {plan.location === "square"
+                          ? "Town square"
+                          : destination(plan.location).name}{" "}
+                        · {plan.status}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <span>
+                    Morning assembly is setting the day&apos;s intentions.
+                  </span>
+                )}
+              </div>
               <div className="event-meta">
                 <span>
                   <MapPin size={13} />
@@ -826,6 +881,9 @@ export default function Worldlings() {
                 "Live status appears only after a successful scene response."}
             </p>
             <p>{diagnostics?.tasteReason}</p>
+            {diagnostics?.failoverReason && (
+              <p role="status">Backup dialogue: {diagnostics.failoverReason}</p>
+            )}
             <p data-testid="qloo-diagnostics">
               Qloo:{" "}
               {diagnostics?.qloo.configured === true
@@ -882,7 +940,7 @@ export default function Worldlings() {
               Conversation: {sim.present.join(", ") || "none"}.
             </p>
             <p>
-              Groq requests: {diagnostics?.calls ?? 0}/
+              Dialogue requests: {diagnostics?.calls ?? 0}/
               {diagnostics?.limit ?? 10} · Scene tokens:{" "}
               {diagnostics?.inputTokens ?? 0} in /{" "}
               {diagnostics?.outputTokens ?? 0} out
@@ -950,8 +1008,9 @@ export default function Worldlings() {
             <div>
               <strong>Small world. Room to grow.</strong>
               <p>
-                {diagnostics?.llm === "Groq Live"
-                  ? "Groq Live · A new story, shaped by their memories."
+                {diagnostics?.llm === "Groq Live" ||
+                diagnostics?.llm === "Cerebras Live"
+                  ? `${diagnostics.llm} · A new story, shaped by their memories.`
                   : `Fallback · ${diagnostics?.reason ?? "Dialogue unavailable. Residents continue their own activities."}`}
               </p>
             </div>

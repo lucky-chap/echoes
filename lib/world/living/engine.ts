@@ -14,7 +14,7 @@ import {
   type Route,
 } from "../movement"
 import { newWorld, nextGoal, seeded } from "./planner"
-import { inSquare } from "./presence"
+import { atVenue } from "./presence"
 import { validateScene } from "./validation"
 import type { SceneBundle, Snapshot, Memory, Beat } from "./types"
 export interface LivingSimulation extends Simulation {
@@ -125,9 +125,15 @@ function remainingTravel(s: LivingSimulation) {
   )
 }
 function activate(s: LivingSimulation, ids: ResidentId[]) {
+  const venue = s.bundle!.plan.gathering?.location ?? "square"
   for (const id of ids) {
-    if (!inSquare(s.positions[residents.findIndex((r) => r.id === id)]))
-      throw Error("Resident has not arrived in the square")
+    const agent = s.world.agents.find((a) => a.id === id)!
+    if (
+      s.transits[id] ||
+      agent.location !== venue ||
+      !atVenue(s.positions[residents.findIndex((r) => r.id === id)], venue)
+    )
+      throw Error("Resident has not arrived at the gathering")
     if (!s.present.includes(id)) s.present.push(id)
   }
 }
@@ -135,7 +141,11 @@ function speak(s: LivingSimulation) {
   const b = s.bundle!.scene.beats[s.beat]
   if (
     !s.present.includes(b.speaker) ||
-    !inSquare(s.positions[residents.findIndex((r) => r.id === b.speaker)])
+    s.transits[b.speaker] ||
+    !atVenue(
+      s.positions[residents.findIndex((r) => r.id === b.speaker)],
+      s.bundle!.plan.gathering?.location ?? "square"
+    )
   )
     throw Error("Absent resident cannot speak")
   s.duration = Math.max(3, Math.min(9, b.dialogue.length / 24 + 1))
@@ -148,7 +158,10 @@ function speak(s: LivingSimulation) {
     duration: s.duration,
   }
   s.history = [...s.history, s.speech].slice(-80)
-  s.world.agents.find((a) => a.id === b.speaker)!.mood = b.emotion
+  const actor = s.world.agents.find((a) => a.id === b.speaker)!
+  actor.mood = b.emotion
+  const venue = s.bundle!.plan.gathering?.location ?? "square"
+  actor.currentActivity = `${b.action === "sketch" ? "Sketching" : b.action === "dance" ? "Dancing" : b.action === "sit" ? "Sitting with the conversation" : "Talking"} at ${venue === "square" ? "the town square" : destination(venue).name}`
 }
 function finishBeat(s: LivingSimulation) {
   const { scene } = s.bundle!,
@@ -172,6 +185,25 @@ function finishBeat(s: LivingSimulation) {
     const a = s.world.agents.find((a) => a.id === r.from)!
     a.relationships[r.to] = clamp(a.relationships[r.to] + r.delta)
   }
+  // Only completed, physically performed actions affect needs and preferences.
+  // Dialogue text and model-proposed future actions do not authorize effects.
+  const actor = s.world.agents.find((a) => a.id === b.speaker)!
+  const venue = s.bundle!.plan.gathering?.location ?? "square"
+  if (["sketch", "dance", "sit"].includes(b.action)) {
+    const trait =
+      b.action === "sketch" ? "art" : b.action === "dance" ? "music" : "quiet"
+    actor.learned[trait] = Math.min(0.2, (actor.learned[trait] ?? 0) + 0.02)
+    actor.energy = clamp(
+      actor.energy + (b.action === "dance" ? -3 : b.action === "sit" ? 2 : -1)
+    )
+    remember(s, actor.id, {
+      kind: "activity",
+      text: `${b.action === "sketch" ? "Sketched" : b.action === "dance" ? "Danced" : "Sat down to rest"} at ${venue === "square" ? "the town square" : destination(venue).name}.`,
+      location: venue === "square" ? null : venue,
+      positive: true,
+    })
+    actor.goal = nextGoal(actor)
+  }
   log(
     s,
     `${residents.find((r) => r.id === b.speaker)!.name}: ${b.action} · ${b.emotion}`
@@ -188,7 +220,7 @@ function nextBeat(s: LivingSimulation) {
     s.joining = true
     s.phase = "gathering"
     s.time = 0
-    send(s, arrival.residentId, "square")
+    send(s, arrival.residentId, s.bundle!.plan.gathering?.location ?? "square")
     s.duration = remainingTravel(s)
     log(
       s,
@@ -234,7 +266,13 @@ function arrive(s: LivingSimulation) {
   }
 }
 function finish(s: LivingSimulation) {
+  const activityVisit = s.bundle!.plan.activityVisit === true
+  const wasMorningAssembly =
+    !activityVisit &&
+    s.world.hour === 9 &&
+    s.bundle!.plan.gathering?.location === "square"
   for (const a of s.world.agents) {
+    if (activityVisit) continue
     const d = s.bundle!.plan.destinations[a.id]
     a.recentVisits = [d, ...a.recentVisits].slice(0, 5)
     a.energy = clamp(a.energy + (d === "music" ? -18 : 12))
@@ -338,7 +376,7 @@ function finish(s: LivingSimulation) {
         id: `social-${s.round}`,
         participants: [...s.bundle!.plan.participants],
         sceneId: s.bundle!.scene.sceneId,
-        location: "square" as const,
+        location: s.bundle!.plan.gathering?.location ?? "square",
         summary: s.bundle!.scene.summary,
         day: s.world.day,
         hour: s.world.hour,
@@ -346,6 +384,16 @@ function finish(s: LivingSimulation) {
         confirmedOutcome: s.bundle!.scene.ending,
       },
     ].slice(-12)
+    if (activityVisit) {
+      for (const id of s.bundle!.plan.participants) {
+        const a = s.world.agents.find((agent) => agent.id === id)!
+        a.social = clamp(a.social - 10)
+        for (const other of s.bundle!.plan.participants)
+          if (other !== id)
+            a.relationships[other] = clamp(a.relationships[other] + 1)
+        a.goal = nextGoal(a)
+      }
+    }
   }
   if (s.bundle!.plan.gathering) {
     const gathering = s.world.gatherings.find(
@@ -356,8 +404,79 @@ function finish(s: LivingSimulation) {
         ? "completed"
         : "cancelled"
   }
+  // The director creates one concrete, local daytime commitment after every
+  // morning assembly. It is an engine decision, never a model instruction.
+  if (wasMorningAssembly) {
+    const decision = s.bundle!.plan.culturalDecision
+    const venue =
+      decision?.destinationId ??
+      (s.world.situation === "rain" ? "cafe" : "museum")
+    const organizer = decision?.residentId ?? "luna"
+    const invited = residents.map((resident) => resident.id)
+    const responses = Object.fromEntries(
+      invited.map((id, index) => {
+        const agent = s.world.agents.find((item) => item.id === id)!
+        const roll = seeded(s.world.seed, s.world.completed * 131 + index)
+        return [
+          id,
+          id === organizer || (agent.energy > 35 && roll > 0.14)
+            ? "accepted"
+            : roll > 0.07
+              ? "late"
+              : "declined",
+        ]
+      })
+    ) as import("./types").Gathering["responses"]
+    s.world.gatherings = [
+      ...s.world.gatherings,
+      {
+        id: `day-${s.world.day}-commitment-${s.world.completed + 1}`,
+        organizer,
+        invited,
+        responses,
+        location: venue,
+        scheduledDay: s.world.day,
+        scheduledHour: 14,
+        reason: decision
+          ? `Share the verified discovery ${decision.entityName} together.`
+          : "Follow through on the morning assembly's shared plan.",
+        entityId: decision?.entityId ?? null,
+        status: "planned" as const,
+        timeoutHour: 17,
+      },
+    ].slice(-8)
+    log(
+      s,
+      `Morning assembly set a ${destination(venue).name} commitment for 14:00.`
+    )
+  }
   s.world.completed++
-  s.world.hour += 5
+  if (activityVisit) {
+    s.world.pendingVisits = (s.world.pendingVisits ?? []).slice(1)
+  } else {
+    // Arrival is followed by conversation at each occupied venue. Shared visits
+    // take priority; a lone resident may have a short contextual aside.
+    const covered = s.bundle!.plan.gathering?.location
+    s.world.pendingVisits = (["cafe", "music", "museum"] as DestinationId[])
+      .map((location) => ({
+        location,
+        participants: s.world.agents
+          .filter(
+            (a) =>
+              a.location === location &&
+              atVenue(
+                s.positions[residents.findIndex((r) => r.id === a.id)],
+                location
+              )
+          )
+          .map((a) => a.id),
+      }))
+      .filter(
+        (visit) => visit.participants.length > 0 && visit.location !== covered
+      )
+      .sort((a, b) => b.participants.length - a.participants.length)
+  }
+  if (!s.world.pendingVisits?.length) s.world.hour += 5
   if (s.world.hour >= 22) {
     s.world.day++
     const weather = seeded(s.world.seed, s.world.day * 109)
@@ -385,7 +504,10 @@ export function beginLiving(
   previous: LivingSimulation,
   bundle: SceneBundle
 ): LivingSimulation {
-  if (bundle.diagnostics.llm === "Groq Live")
+  if (
+    bundle.diagnostics.llm === "Groq Live" ||
+    bundle.diagnostics.llm === "Cerebras Live"
+  )
     validateScene(bundle.scene, bundle.plan)
   else if (
     bundle.scene.beats.length ||
@@ -447,12 +569,20 @@ export function beginLiving(
     ].slice(-8)
   }
   for (const r of residents) {
-    if (
-      bundle.plan.initialParticipants.includes(r.id) &&
-      s.world.agents.find((agent) => agent.id === r.id)!.location !== "square"
+    if (bundle.plan.initialParticipants.includes(r.id)) {
+      const venue = bundle.plan.gathering?.location ?? "square"
+      if (
+        !atVenue(
+          s.positions[residents.findIndex((resident) => resident.id === r.id)],
+          venue
+        ) ||
+        s.world.agents.find((agent) => agent.id === r.id)!.location !== venue
+      )
+        send(s, r.id, venue)
+    } else if (
+      bundle.plan.arrival?.residentId !== r.id &&
+      !bundle.plan.activityVisit
     )
-      send(s, r.id, "square")
-    else if (bundle.plan.arrival?.residentId !== r.id)
       send(s, r.id, bundle.plan.destinations[r.id])
   }
   if (bundle.diagnostics.llm === "Fallback") {
@@ -466,7 +596,11 @@ export function beginLiving(
     )
   }
   s.duration = remainingTravel(s)
-  if (bundle.diagnostics.llm === "Groq Live") log(s, bundle.plan.summary)
+  if (
+    bundle.diagnostics.llm === "Groq Live" ||
+    bundle.diagnostics.llm === "Cerebras Live"
+  )
+    log(s, bundle.plan.summary)
   for (const row of bundle.plan.scores)
     log(
       s,
@@ -520,6 +654,7 @@ export function advanceLiving(
         s.speech = null
         s.duration = 0
         log(s, "Everyone waits together for the conversation to continue.")
+        break
       } else {
         s.phase = "proposing"
         speak(s)

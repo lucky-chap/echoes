@@ -166,7 +166,7 @@ export function validateSnapshot(value: unknown): Snapshot {
             })
           )
           .min(2)
-          .max(8),
+          .max(10),
       })
     )
     .max(4)
@@ -293,9 +293,9 @@ export function validateSnapshot(value: unknown): Snapshot {
           .max(3),
         responses: z.partialRecord(
           z.enum(["mia", "kai", "luna"]),
-          z.enum(["pending", "accepted", "declined"])
+          z.enum(["pending", "accepted", "declined", "late"])
         ),
-        location: z.literal("square"),
+        location: z.enum(["square", "cafe", "music", "museum"]),
         scheduledDay: z.number().int().min(1).max(10000),
         scheduledHour: z.number().min(0).max(23),
         reason: z.string().min(1).max(300),
@@ -306,6 +306,7 @@ export function validateSnapshot(value: unknown): Snapshot {
           "active",
           "completed",
           "cancelled",
+          "missed",
         ]),
         timeoutHour: z.number().min(0).max(23),
       })
@@ -314,7 +315,28 @@ export function validateSnapshot(value: unknown): Snapshot {
     .parse(value.gatherings)
   // Normalize to stable resident order. Extra untrusted fields never reach a prompt.
   const world = value as unknown as Snapshot
+  const pendingVisits = z
+    .array(
+      z.strictObject({
+        location: z.enum(["cafe", "music", "museum"]),
+        participants: z
+          .array(z.enum(["mia", "kai", "luna"]))
+          .min(1)
+          .max(3)
+          .refine((ids) => new Set(ids).size === ids.length),
+      })
+    )
+    .max(3)
+    .refine((visits) => {
+      const ids = visits.flatMap((visit) => visit.participants)
+      return (
+        new Set(ids).size === ids.length &&
+        new Set(visits.map((visit) => visit.location)).size === visits.length
+      )
+    })
+    .parse(value.pendingVisits ?? [])
   return {
+    pendingVisits,
     version: 1,
     recentScenes,
     encounter: world.encounter ?? "auto",
@@ -379,7 +401,7 @@ export function validateScene(value: unknown, plan: Plan): Scene {
     !text(value.summary, 180) ||
     !Array.isArray(value.beats) ||
     value.beats.length < (plan.participants.length === 1 ? 2 : 4) ||
-    value.beats.length > 8
+    value.beats.length > 10
   )
     throw Error("Invalid scene structure")
   const present = new Set(plan.initialParticipants)
@@ -494,13 +516,13 @@ const residentSchema = z.enum(["mia", "kai", "luna"])
 const locationSchema = z.enum(["cafe", "music", "museum"])
 const memoryUpdateSchema = z.strictObject({
   residentId: residentSchema,
-  beatIndex: z.number().int().min(0).max(7),
+  beatIndex: z.number().int().min(0).max(9),
   kind: z.enum(["conversation", "promise", "discovery"]),
 })
 const relationshipChangeSchema = z.strictObject({
   from: residentSchema,
   to: residentSchema,
-  beatIndex: z.number().int().min(0).max(7),
+  beatIndex: z.number().int().min(0).max(9),
   delta: z.number().int().min(-2).max(2),
 })
 const sceneValidator = z.strictObject({
@@ -520,7 +542,7 @@ const sceneValidator = z.strictObject({
     .array(
       z.union([
         z.strictObject({
-          replyTo: z.number().int().min(0).max(7).nullable(),
+          replyTo: z.number().int().min(0).max(9).nullable(),
           references: z.array(z.string().min(1).max(100)).max(3),
           speaker: residentSchema,
           dialogue: z.string().min(1).max(220),
@@ -540,7 +562,7 @@ const sceneValidator = z.strictObject({
           targetLocation: z.null(),
         }),
         z.strictObject({
-          replyTo: z.number().int().min(0).max(7).nullable(),
+          replyTo: z.number().int().min(0).max(9).nullable(),
           references: z.array(z.string().min(1).max(100)).max(3),
           speaker: residentSchema,
           dialogue: z.string().min(1).max(220),
@@ -551,11 +573,11 @@ const sceneValidator = z.strictObject({
       ])
     )
     .min(2)
-    .max(8),
+    .max(10),
   suggestedMemoryUpdates: z.array(memoryUpdateSchema).max(3),
   suggestedRelationshipChanges: z.array(relationshipChangeSchema).max(2),
 })
-// Groq generates the square encounter's expressive actions. Travel remains an
+// Groq generates expressive venue dialogue. Travel remains an
 // engine transition after dialogue. Keeping this schema flat avoids Groq's
 // action-union compiler limitation; the runtime accepts validated targeted actions too.
 export const sceneSchema = z.toJSONSchema(
@@ -563,7 +585,7 @@ export const sceneSchema = z.toJSONSchema(
     beats: z
       .array(
         z.strictObject({
-          replyTo: z.number().int().min(0).max(7).nullable(),
+          replyTo: z.number().int().min(0).max(9).nullable(),
           references: z.array(z.string().min(1).max(100)).max(3),
           speaker: residentSchema,
           dialogue: z.string().min(1).max(220),
@@ -583,7 +605,7 @@ export const sceneSchema = z.toJSONSchema(
         })
       )
       .min(2)
-      .max(8),
+      .max(10),
     // Groq's constrained decoder does not reliably enforce maxItems here.
     // The server normalizes these advisory fields to [] before validation.
     suggestedMemoryUpdates: z.array(memoryUpdateSchema),
