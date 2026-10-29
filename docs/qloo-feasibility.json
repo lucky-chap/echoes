@@ -1,0 +1,1930 @@
+{
+  "live": true,
+  "startedAt": "2026-10-27T17:21:50.806Z",
+  "origin": "https://hackathon.api.qloo.com",
+  "profiles": [
+    {
+      "label": "Ghanaian highlife",
+      "birthYear": 1970,
+      "hometown": "Accra",
+      "country": "Ghana",
+      "favorites": [
+        "Daddy Lumba",
+        "Osibisa"
+      ],
+      "window": {
+        "from": 1983,
+        "to": 1995
+      },
+      "resolution": [
+        {
+          "query": "Daddy Lumba",
+          "status": null,
+          "error": "network or invalid JSON",
+          "results": []
+        },
+        {
+          "query": "Osibisa",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "33154E9A-561F-49F8-AD1D-C05323ECE3B8",
+              "name": "Osibisa",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "b1355867-16a1-4863-ae3b-6a8be122eaaa"
+                },
+                "spotify": {
+                  "id": "12X85dtebfc7JTZ8iMBT2o"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "resolvedFavorites": 1,
+      "domains": [
+        {
+          "type": "artist",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "A97D1C21-926D-43CB-931C-A6E18D7598B9",
+              "name": "Manu Dibango",
+              "properties": {
+                "start_year": 1960,
+                "end_year": 2020,
+                "place_of_birth": "Douala, Littoral, Cameroon",
+                "primary_genres": [
+                  "Afrobeat",
+                  "Jazz",
+                  "Funk",
+                  "World Music"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "826b488f-5164-45ca-abc4-ab11b3c321eb",
+                    "artist_type": "Person"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "30UIjoCGuL3Fa5BOc3ayNW",
+                    "verified": false,
+                    "followers": 49640,
+                    "monthly_listeners": 185686
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "24631EBA-8934-4B5E-80CC-F4C539B3F5EA",
+              "name": "Matata",
+              "properties": {
+                "primary_genres": []
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "566ea6da-3a59-4fce-879c-eb97ca8d9d25",
+                    "artist_type": "Group"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "2k5havQSaN7YIM5DUcnhnr",
+                    "verified": true,
+                    "followers": 13,
+                    "monthly_listeners": 1
+                  },
+                  {
+                    "id": "6E5yAQ5G8tlNBRbH1j8EgT",
+                    "verified": true,
+                    "followers": 71,
+                    "monthly_listeners": 229
+                  },
+                  {
+                    "id": "7imj8fIllhgGJqvKUVrdgV",
+                    "verified": true,
+                    "followers": 1378,
+                    "last_release": 2020,
+                    "first_release": 2019,
+                    "monthly_listeners": 9189
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "F715A44C-63DF-4801-95E4-D78FB695BE3E",
+              "name": "ManDrill",
+              "properties": {
+                "start_year": 1968,
+                "primary_genres": [
+                  "Funk",
+                  "Soul",
+                  "Latin Funk"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "2cdbe932-9ad2-4b19-a24d-fb781914d16c",
+                    "artist_type": "Person"
+                  },
+                  {
+                    "id": "697ea2f4-4f79-466a-8c57-29d5455b68bd",
+                    "artist_type": "Group"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "6RXdldNEYORlEJnAvvktW1",
+                    "verified": true,
+                    "followers": 307,
+                    "last_release": 2020,
+                    "first_release": 2020,
+                    "monthly_listeners": 1045
+                  },
+                  {
+                    "id": "6RWnslEkqboHbDg0OUabe5",
+                    "verified": true,
+                    "followers": 50750,
+                    "last_release": 2020,
+                    "first_release": 1972,
+                    "monthly_listeners": 88307
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "D02B564B-F720-4685-BA3C-2DBBC0185C80",
+              "name": "Peter King",
+              "properties": {
+                "start_year": 1950,
+                "end_year": 2020,
+                "primary_genres": [
+                  "Jazz",
+                  "Saxophone Jazz"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "0eacd711-7722-4158-b616-8667faf2c54b",
+                    "artist_type": "Person"
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "FEBB22D9-48A9-4BB6-8FC2-944AA01559BD",
+              "name": "African Music Machine",
+              "properties": {
+                "start_year": 1970,
+                "primary_genres": [
+                  "Funk",
+                  "Afrobeat",
+                  "Soul"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "e55e5138-bff7-4fec-ae57-74e304b05a01",
+                    "artist_type": "Group"
+                  }
+                ]
+              }
+            }
+          ],
+          "firstResultYearCheck": {
+            "source": "MusicBrainz",
+            "status": 200,
+            "artistId": "826b488f-5164-45ca-abc4-ab11b3c321eb",
+            "works": [
+              {
+                "title": "Sax Lounge Emotion",
+                "date": "2010-06-07"
+              },
+              {
+                "title": "Deliverance",
+                "date": "1987"
+              },
+              {
+                "title": "Hommage à la Nouvelle‐Orléans",
+                "date": "2007"
+              },
+              {
+                "title": "Soul Makossa",
+                "date": "1993"
+              },
+              {
+                "title": "Anthology",
+                "date": "2000"
+              },
+              {
+                "title": "À la Jamaïque",
+                "date": "1987"
+              },
+              {
+                "title": "Collection Légende",
+                "date": "1999"
+              },
+              {
+                "title": "Lagos Go Slow",
+                "date": "2016"
+              },
+              {
+                "title": "Essential Recordings",
+                "date": "2006-04-17"
+              },
+              {
+                "title": "Spirituals",
+                "date": "2000"
+              },
+              {
+                "title": "Paris je t’aime d’amour",
+                "date": "2020-02-14"
+              },
+              {
+                "title": "Soul Makossa",
+                "date": "1973"
+              },
+              {
+                "title": "Africadelic",
+                "date": "2003-11-03"
+              },
+              {
+                "title": "Makossa Man",
+                "date": "1974"
+              },
+              {
+                "title": "Mélodies africaines, Volume 2",
+                "date": "1984"
+              },
+              {
+                "title": "L’African‐Team",
+                "date": "1970-02-02"
+              },
+              {
+                "title": "Makossa Man: The Very Best Of",
+                "date": "2009"
+              },
+              {
+                "title": "African Woodoo",
+                "date": "2008"
+              },
+              {
+                "title": "Mboa’ Su",
+                "date": "2000-03-30"
+              },
+              {
+                "title": "Sun Explosion / Big Blow",
+                "date": "1978"
+              },
+              {
+                "title": "Pata Piya",
+                "date": "1985"
+              },
+              {
+                "title": "Super Kumba",
+                "date": "1974"
+              },
+              {
+                "title": "Deliverance (Live in Douala)",
+                "date": "1983"
+              },
+              {
+                "title": "Surtension",
+                "date": "1984"
+              },
+              {
+                "title": "Ambassador",
+                "date": "1981"
+              },
+              {
+                "title": "L’Herbe sauvage",
+                "date": "1977"
+              },
+              {
+                "title": "Bao Bao",
+                "date": "1996"
+              },
+              {
+                "title": "Manu Safari",
+                "date": "1998"
+              },
+              {
+                "title": "Soft and Sweet",
+                "date": "1983"
+              },
+              {
+                "title": "Joseph Kabasele And The Creation Of Surboum African Jazz (1960-1963)",
+                "date": "2021-06-30"
+              },
+              {
+                "title": "Electric Africa",
+                "date": "1985"
+              },
+              {
+                "title": "Choc ’n Soul: 1978–1989 Sessions",
+                "date": "2010-07-26"
+              },
+              {
+                "title": "Voyage anthologique",
+                "date": "2004-06-08"
+              },
+              {
+                "title": "Africa Boogie",
+                "date": "2016"
+              },
+              {
+                "title": "Saxy‐Party",
+                "date": "1969"
+              },
+              {
+                "title": "Lamastabastani",
+                "date": "1995"
+              },
+              {
+                "title": "Sun Explosion",
+                "date": "1978"
+              },
+              {
+                "title": "Dany Doriz Big Band",
+                "date": "2014"
+              },
+              {
+                "title": "Africa d’ambiance",
+                "date": "2023-10-25"
+              },
+              {
+                "title": "Tu sais (Hymne officiel de la francophonie)",
+                "date": "2016-08-05"
+              },
+              {
+                "title": "Sax & Spirituals Lamastabastani",
+                "date": "2006-05-16"
+              },
+              {
+                "title": "Afro‐Soul Machine",
+                "date": "2011-09-30"
+              },
+              {
+                "title": "M & M",
+                "date": "2017-03-31"
+              },
+              {
+                "title": "Best Of",
+                "date": "2020"
+              },
+              {
+                "title": "Makossa ’87 (Big Blow)",
+                "date": "1986"
+              },
+              {
+                "title": "Manu 76",
+                "date": "1976"
+              },
+              {
+                "title": "Lion of Africa",
+                "date": "1989-11-23"
+              },
+              {
+                "title": "Manu Dibango",
+                "date": "1978"
+              },
+              {
+                "title": "Biko",
+                "date": "1994"
+              },
+              {
+                "title": "Wakafrika",
+                "date": "1994-06-14"
+              },
+              {
+                "title": "Deliverance",
+                "date": "1983"
+              },
+              {
+                "title": "The World Of",
+                "date": "1976"
+              },
+              {
+                "title": "African Voodoo",
+                "date": "1972"
+              },
+              {
+                "title": "Manga Bolo",
+                "date": "2016-02-24"
+              },
+              {
+                "title": "Ceddo (Bande originale du film)",
+                "date": "1977"
+              },
+              {
+                "title": "L’Aventure ambiguë (Bande originale du film)",
+                "date": "1984-07-01"
+              },
+              {
+                "title": "Manu Dibango",
+                "date": "1971-02"
+              },
+              {
+                "title": "That African Beat, Volume 2",
+                "date": "2023-09-15"
+              },
+              {
+                "title": "Twist à Léo",
+                "date": "1962"
+              },
+              {
+                "title": "Soul Makossa",
+                "date": "1973-05"
+              },
+              {
+                "title": "La Fête à Manu",
+                "date": "1988"
+              },
+              {
+                "title": "Anniversaire au pays",
+                "date": "1978"
+              },
+              {
+                "title": "Ballad Emotion",
+                "date": "2011-06-06"
+              },
+              {
+                "title": "Piano Solo, Mélodies Africaines, Volume 1",
+                "date": "1983"
+              },
+              {
+                "title": "The Rough Guide to Manu Dibango",
+                "date": "2004"
+              },
+              {
+                "title": "Afrijazzy",
+                "date": "1986"
+              },
+              {
+                "title": "Mboa",
+                "date": "1982"
+              },
+              {
+                "title": "Soul Makossa",
+                "date": "1985"
+              },
+              {
+                "title": "À l’Olympia",
+                "date": "1977"
+              },
+              {
+                "title": "Seventie’s",
+                "date": "1987"
+              },
+              {
+                "title": "From Africa",
+                "date": "2018-10-19"
+              },
+              {
+                "title": "Anbessa",
+                "date": "2022-04-22"
+              },
+              {
+                "title": "Le Prix de la liberté (Bande originale du film)",
+                "date": "1978"
+              },
+              {
+                "title": "CubAfrica",
+                "date": "1998"
+              },
+              {
+                "title": "Kamer Feeling",
+                "date": "2001-06-19"
+              },
+              {
+                "title": "Gone Clear",
+                "date": "1980"
+              },
+              {
+                "title": "Balade en saxo",
+                "date": "2013-11-04"
+              },
+              {
+                "title": "Dance With Manu Dibango",
+                "date": "1995"
+              },
+              {
+                "title": "Négropolitaines, volume 1",
+                "date": "1994-03"
+              },
+              {
+                "title": "Négropolitaines, volume 2",
+                "date": "1992-08-01"
+              },
+              {
+                "title": "African Jazz invites O.K. Jazz (1961-1970)",
+                "date": "2025-05-02"
+              },
+              {
+                "title": "African Soul: The Very Best Of",
+                "date": "1997"
+              },
+              {
+                "title": "Waka Juju",
+                "date": "1982"
+              },
+              {
+                "title": "Live 96, Papa Groove",
+                "date": "1996-01-01"
+              },
+              {
+                "title": "Africadelic",
+                "date": "1972"
+              },
+              {
+                "title": "Polysonik",
+                "date": "1990"
+              },
+              {
+                "title": "Afrovision",
+                "date": "1976"
+              },
+              {
+                "title": "Disque d’or",
+                "date": "1997"
+              },
+              {
+                "title": "The Very Best of Manu Dibango",
+                "date": "2000"
+              },
+              {
+                "title": "Live ’91",
+                "date": "1991"
+              },
+              {
+                "title": "Aloko Party",
+                "date": "2016"
+              },
+              {
+                "title": "Autoportrait",
+                "date": "1995"
+              },
+              {
+                "title": "Dibango 82",
+                "date": "2025-04-03"
+              },
+              {
+                "title": "Comment faire l’amour avec un nègre sans se fatiguer (Musique originale du film)",
+                "date": "1997"
+              },
+              {
+                "title": "Kwele",
+                "date": "2018-07-12"
+              },
+              {
+                "title": "O Boso",
+                "date": "1972"
+              },
+              {
+                "title": "Home Made",
+                "date": "1979"
+              },
+              {
+                "title": "Past Present Future",
+                "date": "2011-11-07"
+              },
+              {
+                "title": "B Sides",
+                "date": "2002-08-27"
+              }
+            ],
+            "inWindow": true,
+            "truncated": true
+          }
+        },
+        {
+          "type": "movie",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "5D47A781-48EC-41DD-A63B-4B1672986BF7",
+              "name": "Green Book",
+              "properties": {
+                "release_year": 2018,
+                "release_date": "2018-11-16",
+                "release_country": [
+                  "China",
+                  "South Korea",
+                  "United States"
+                ],
+                "filming_location": "Houmas House Plantation, Burnside, Louisiana, USA, Carnegie Hall, New York City, New York, USA, McAlister Auditorium, Tulane University, New Orleans, LA 70118, USA, English Turn Golf & Country Club, 1 Clubhouse Dr, New Orleans, Louisiana, USA, Ruby's Roadhouse, Mandeville, Louisiana, USA, Macon, Georgia, USA, International House Hotel, Camp Street, New Orleans, Louisiana, USA, Clover Grill, French Quarter, New Orleans, Louisiana, USA, New Orleans Athletic Club, New Orleans, Louisiana, USA, Carver Theater, New Orleans, Louisiana, USA, Sigle's Antiques, Royal Street, New Orleans, Louisiana, USA, Northshore Broadcasting building, Hammond, Louisiana, USA, Aloha Motel, Metairie, Louisiana, USA, The Roosevelt New Orleans - 130 Roosevelt Way, New Orleans, Louisiana, USA, Amite, Louisiana, USA, Orpheum Theater - 129 Roosevelt Way, New Orleans, Louisiana, USA, Saenger Theater, New Orleans, Louisiana, USA, W.P. Brown House, 4717 St. Charles Ave., New Orleans, Louisiana, USA, Louisiana, USA, Burnside, Louisiana, USA, French Quarter, New Orleans, Louisiana, USA, Hammond, Louisiana, USA, Metairie, Louisiana, USA, New Orleans, Louisiana, USA, USA, Georgia, USA",
+                "genres": [
+                  "Biography",
+                  "Comedy",
+                  "Drama",
+                  "Music"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "E9923E29-EE90-4701-B525-36D782ECD350",
+              "name": "Dead Poets Society",
+              "properties": {
+                "release_year": 1989,
+                "release_date": "1989-06-09",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "St. Andrew's School - 350 Noxontown Road, Middletown, Delaware, USA, Everett Theatre - 47 West Main Street, Middletown, Delaware, USA, New Castle, Delaware, USA, Westover Hills, New Castle, Delaware, USA, Middletown, Delaware, USA, Wolf Cave, Delaware, USA, Rockland, Delaware, USA, 708 Edgehill Road in Wilmington, Delaware, USA",
+                "genres": [
+                  "Comedy",
+                  "Drama"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "9E661A87-6EB9-4138-8795-27284CD8E249",
+              "name": "Marriage Story",
+              "properties": {
+                "release_year": 2019,
+                "release_date": "2019-12-06",
+                "release_country": [
+                  "United Kingdom",
+                  "United States"
+                ],
+                "filming_location": "Warner Brothers Burbank Studios - 4000 Warner Boulevard, Burbank, California, USA, New York, USA, New York City, New York, USA, USA, 5224 Sunset Boulevard, Los Angeles, California, USA",
+                "genres": [
+                  "Drama",
+                  "Romance"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "AB64C7F6-60F4-4C15-A0F8-8E2D59174595",
+              "name": "The Irishman",
+              "properties": {
+                "release_year": 2019,
+                "release_date": "2019-11-27",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "New York City, New York, USA, Suffern, New York, USA, New Jersey, USA, Rodeway Inn, 270 W. Jericho Turnpike, Huntington Station, New York, USA, Tuxedo, New York, USA, Weir's Ice Cream, Washingtonville, New York, USA, Clinton Diner, Maspeth, Queens, New York City, New York, USA, St. John the Baptist Church, 670 Yonkers Avenue, Yonkers, New York, USA, Washingtonville, New York, USA, White Plains, New York, USA, Miami, Florida, USA, St. Matthias R.C. Church, 5815 Catalpa Ave, Ridgewood, NY 11385, United States, The Palm Beach Kennel Club, 1111 N Congress Ave, West Palm Beach, FL 33409, United States, Ralph's Motor Repairs, Washingtonville, New York, USA, Callahan-Nannini Shale, Blooming Grove, New York, USA, Jessie's Bagels, 203 Orange Turnpike, Sloatsburg, NY 10974, United States, Phelps Way, Mt. Pleasant, New York, USA, Spruce Street, Paterson, New Jersey, USA, Market Street, Paterson, New Jersey, USA, New York, USA, Northern State Prison, Newark, New Jersey, USA, East Jersey State Prison, Avenel, New Jersey, USA, Ridgewood, Queens, New York, USA, Florida, USA, USA, Villa di Roma Restaurant, 936 S 9th St, Philadelphia, Pennsylvania, USA, Friendly Lounge, 1039 S 8th St, Philadelphia, Pennsylvania, USA",
+                "genres": [
+                  "Biography",
+                  "Crime",
+                  "Drama",
+                  "History",
+                  "Thriller"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "65745A20-2FE5-44EC-8349-BDA0C8522CEB",
+              "name": "Whiplash",
+              "properties": {
+                "release_year": 2014,
+                "release_date": "2014-10-15",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Santa Clarita, California, USA, Los Angeles, California, USA, Orpheum Theater - 842 South Broadway, Downtown, Los Angeles, California, USA",
+                "genres": [
+                  "Drama",
+                  "Music"
+                ]
+              },
+              "external": {}
+            }
+          ],
+          "firstResultYearCheck": {
+            "source": "TMDB",
+            "status": "not configured"
+          }
+        },
+        {
+          "type": "tv_show",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "B4D876CE-3BC8-4027-8D08-0BA2898FD152",
+              "name": "The Get Down",
+              "properties": {
+                "release_year": 2016,
+                "release_date": "2016-08-12",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "85 Court St, White Plains, New York, USA, St. Mary's Park, Bronx, New York, USA, 1125 Grand Concourse, Bronx, New York, USA, 1520 sedgewick ave, bronx, New York, USA",
+                "genres": [
+                  "Drama",
+                  "Music",
+                  "Musical"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "050ADC73-262E-44FE-945D-8976510A1E5B",
+              "name": "Vinyl",
+              "properties": {
+                "release_year": 2016,
+                "release_date": "2016-02-14",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Williamsburg, Brooklyn, New York City, New York, USA, New York City, New York, USA",
+                "genres": [
+                  "Drama",
+                  "Music"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "459C6C03-CF24-4479-90A4-030B371CF9EC",
+              "name": "Atlanta",
+              "properties": {
+                "release_year": 2016,
+                "release_date": "2016-09-06",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Atlanta, Georgia, USA, Georgia, USA, USA",
+                "genres": [
+                  "Comedy",
+                  "Drama",
+                  "Music"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "DF3A93F5-CC5E-40A4-A3F8-D175CFEFAD8D",
+              "name": "Underground",
+              "properties": {
+                "release_year": 2016,
+                "release_date": "2016-03-09",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Savannah, Georgia, USA",
+                "genres": [
+                  "Adventure",
+                  "Drama",
+                  "History",
+                  "Thriller"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "8D10727F-E1DF-43D5-BE20-B9CCF064A697",
+              "name": "Empire",
+              "properties": {
+                "release_year": 2015,
+                "release_date": "2015-01-07",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Chicago, Illinois, USA, Cinespace Chicago Film Studios, Chicago, Illinois, USA, 353 North Clark Street, Chicago, Illinois, USA",
+                "genres": [
+                  "Drama",
+                  "Music"
+                ]
+              },
+              "external": {}
+            }
+          ],
+          "firstResultYearCheck": {
+            "source": "TMDB",
+            "status": "not configured"
+          }
+        }
+      ]
+    },
+    {
+      "label": "British rock",
+      "birthYear": 1945,
+      "hometown": "Liverpool",
+      "country": "United Kingdom",
+      "favorites": [
+        "The Beatles",
+        "The Rolling Stones"
+      ],
+      "window": {
+        "from": 1958,
+        "to": 1970
+      },
+      "resolution": [
+        {
+          "query": "The Beatles",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "996272B0-CB79-48D3-8B83-8ED34F2DE9AF",
+              "name": "The Beatles",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "8d3431db-bc83-4dc2-93b8-0e46e31d09f7"
+                },
+                "spotify": {
+                  "id": "3WrFJ7ztbogyGnTHbHJFl2"
+                }
+              }
+            },
+            {
+              "entity_id": "3FEAFBB3-1BD7-4899-993A-015B1E7C22D3",
+              "name": "The Beatles Tribute Band",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "904C2175-FFC1-4FF6-BC29-C1EA72E51663",
+              "name": "The Beatles Recovered Band",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "63AF6520-0A89-4B61-9EE0-D918535EAF88",
+              "name": "The Beatles With Tony Sheridan",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "C8BB5CFF-67B5-4523-84D7-74C32F95A632",
+              "name": "The Beatles Revival Band",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "01382c0f-b134-4257-9a73-921bcaaf2861"
+                },
+                "spotify": {}
+              }
+            }
+          ]
+        },
+        {
+          "query": "The Rolling Stones",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "3A78E120-14F8-4DA2-93EE-1ED35F5FFEC7",
+              "name": "The Rolling Stones",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "b071f9fa-14b0-4217-8e97-eb41da73f598"
+                },
+                "spotify": {
+                  "id": "22bE4uQ6baNwSHPVcDxLCe"
+                }
+              }
+            },
+            {
+              "entity_id": "A79645C8-EA42-442E-B448-918AE5D09FC0",
+              "name": "The Beatles and Rolling Stones",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "5D83AF5D-38AC-470C-8950-50109EAB4906",
+              "name": "12 Stones",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "6f81a7dc-be31-4498-ae95-6d994ffec614"
+                },
+                "spotify": {
+                  "id": "0DrXhci3WAyo0WJv1RBOG6"
+                }
+              }
+            },
+            {
+              "entity_id": "A91A65CE-9482-44D6-B34E-266EC0A9FE9C",
+              "name": "ANNA TSUCHIYA inspi' NANA (BLACK STONES)",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "FD1EB56E-9BB5-435A-B9E4-83AFD1EF409B",
+              "name": "The Blue Stones",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "bff6b03f-c91b-4af9-a7f3-3dad6bc3165e"
+                },
+                "spotify": {
+                  "id": "5VPCIIfZPK8KPsgz4jmOEC"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "resolvedFavorites": 2,
+      "domains": [
+        {
+          "type": "artist",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "0DF0411F-A029-4706-A90A-F563AF4BB325",
+              "name": "The Who",
+              "properties": {
+                "start_year": 1964,
+                "primary_genres": [
+                  "Rock",
+                  "Classic Rock",
+                  "Hard Rock",
+                  "Rock Opera",
+                  "Mod"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "9fdaa16b-a6c4-4831-b87c-bc9ca8ce7eaa",
+                    "artist_type": "Group"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "67ea9eGLXYMsO2eYQRui3w",
+                    "verified": true,
+                    "followers": 3711335,
+                    "last_release": 2020,
+                    "first_release": 1965,
+                    "monthly_listeners": 7282608
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "9E997B13-E911-48FB-BC97-AAED66250674",
+              "name": "The Doors",
+              "properties": {
+                "start_year": 1965,
+                "end_year": 1973,
+                "primary_genres": [
+                  "Psychedelic Rock",
+                  "Classic Rock",
+                  "Rock",
+                  "60s",
+                  "Psychedelic"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "9efff43b-3b29-4082-824e-bc82f646f93d",
+                    "artist_type": "Group"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "22WZ7M8sxp5THdruNY3gXt",
+                    "verified": true,
+                    "followers": 5479422,
+                    "last_release": 2020,
+                    "first_release": 1967,
+                    "monthly_listeners": 8288768
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "B2B2A210-0E86-44B8-8989-B8BFF6E22B66",
+              "name": "Led Zeppelin",
+              "properties": {
+                "start_year": 1968,
+                "end_year": 1980,
+                "primary_genres": [
+                  "Hard Rock",
+                  "Blues Rock",
+                  "Heavy Metal",
+                  "Classic Rock",
+                  "Rock"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "678d88b2-87b0-403b-b63d-5da7465aecc3",
+                    "artist_type": "Group"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "36QJpDe2go2KgaRleHCDTp",
+                    "verified": true,
+                    "followers": 9978941,
+                    "monthly_listeners": 14339868
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "4D32D0F3-A66B-47E1-BFEA-6AE974D9132B",
+              "name": "John Lennon",
+              "properties": {
+                "start_year": 1956,
+                "end_year": 1980,
+                "place_of_birth": "Liverpool, Merseyside, England,",
+                "primary_genres": [
+                  "Rock",
+                  "Classic Rock",
+                  "Singer-Songwriter",
+                  "Pop Rock",
+                  "Rock And Roll"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "4d5447d7-c61c-4120-ba1b-d7f471d385b9",
+                    "artist_type": "Person"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "7wcH6naXfssACcXRregV1H",
+                    "verified": false,
+                    "followers": 2,
+                    "monthly_listeners": 9
+                  },
+                  {
+                    "id": "4STHEaNw4mPZ2tzheohgXB",
+                    "verified": true,
+                    "followers": 3291662,
+                    "last_release": 2020,
+                    "first_release": 1967,
+                    "monthly_listeners": 29684398
+                  },
+                  {
+                    "id": "4x1nvY2FN8jxqAFA0DA02H",
+                    "verified": true,
+                    "followers": 3845489,
+                    "last_release": 2020,
+                    "first_release": 1968,
+                    "monthly_listeners": 27110982
+                  }
+                ]
+              }
+            },
+            {
+              "entity_id": "9D2CE149-B32E-4CD4-9DF3-9F44E0545E02",
+              "name": "Cream",
+              "properties": {
+                "start_year": 1966,
+                "end_year": 1968,
+                "primary_genres": [
+                  "Blues Rock",
+                  "Psychedelic Rock",
+                  "Hard Rock"
+                ]
+              },
+              "external": {
+                "musicbrainz": [
+                  {
+                    "id": "ca26a9ec-1ff5-4e10-8ddd-2c41a2d41404",
+                    "artist_type": "Other"
+                  },
+                  {
+                    "id": "2dbd980a-962a-4b6f-a2f3-56eb51350ffa",
+                    "artist_type": "Person"
+                  }
+                ],
+                "spotify": [
+                  {
+                    "id": "1d1dWkQxaKGW8mnZLmo4dr",
+                    "verified": true,
+                    "followers": 28,
+                    "monthly_listeners": 16
+                  },
+                  {
+                    "id": "7j6necEPY4TApEMUs9xJgh",
+                    "verified": true,
+                    "followers": 60719,
+                    "last_release": 2020,
+                    "first_release": 2017,
+                    "monthly_listeners": 152401
+                  },
+                  {
+                    "id": "3GHI9uSeeOLMug39CSo14Y",
+                    "verified": true,
+                    "followers": 40,
+                    "monthly_listeners": 4
+                  },
+                  {
+                    "id": "3LSR2mn4coR3tLrIwoMTwG",
+                    "verified": true,
+                    "followers": 54,
+                    "monthly_listeners": 35
+                  },
+                  {
+                    "id": "14uOiF6KG3hR68JxUmbpcA",
+                    "verified": true,
+                    "followers": 50,
+                    "monthly_listeners": 3
+                  },
+                  {
+                    "id": "47aX9Ypc2IqWcNR3GErAuh",
+                    "verified": true,
+                    "followers": 4,
+                    "monthly_listeners": 1
+                  },
+                  {
+                    "id": "6NkaiJGOIhBOZRjB8KL6Bm",
+                    "verified": true,
+                    "followers": 133,
+                    "last_release": 2020,
+                    "first_release": 2019,
+                    "monthly_listeners": 234
+                  }
+                ]
+              }
+            }
+          ],
+          "firstResultYearCheck": {
+            "source": "MusicBrainz",
+            "status": 200,
+            "artistId": "9fdaa16b-a6c4-4831-b87c-bc9ca8ce7eaa",
+            "works": [
+              {
+                "title": "My Generation",
+                "date": "1965-12-03"
+              },
+              {
+                "title": "The Who Collection",
+                "date": "1985-10-04"
+              },
+              {
+                "title": "Lo mejor de The Who",
+                "date": "1974"
+              },
+              {
+                "title": "Amazing Journey: The Story of the Who",
+                "date": "2008-04-01"
+              },
+              {
+                "title": "Live at Leeds",
+                "date": "1970-05-16"
+              },
+              {
+                "title": "Greatest Hits",
+                "date": "2009-12-21"
+              },
+              {
+                "title": "Tommy",
+                "date": "1969-05-23"
+              },
+              {
+                "title": "Live at the Isle of Wight Festival 1970",
+                "date": "1996-10-29"
+              },
+              {
+                "title": "Who Are You",
+                "date": "1978-08-18"
+              },
+              {
+                "title": "Pop History, Vol. 4",
+                "date": "1970"
+              },
+              {
+                "title": "Who’s Missing",
+                "date": "1985-11-30"
+              },
+              {
+                "title": "The Who Collection",
+                "date": "1988"
+              },
+              {
+                "title": "Live at The Fillmore East 1968",
+                "date": "1989"
+              },
+              {
+                "title": "The Who, The Bee Gees, Joe Cocker, Procol Harum",
+                "date": "1977"
+              },
+              {
+                "title": "The Who",
+                "date": "1980"
+              },
+              {
+                "title": "Join Together",
+                "date": "1990-02-28"
+              },
+              {
+                "title": "Phases",
+                "date": "1981"
+              },
+              {
+                "title": "Live at the Royal Albert Hall",
+                "date": "2001"
+              },
+              {
+                "title": "Two’s Missing",
+                "date": "1987-04-11"
+              },
+              {
+                "title": "Live",
+                "date": "1991"
+              },
+              {
+                "title": "The Who",
+                "date": "1997"
+              },
+              {
+                "title": "The Ultimate Collection",
+                "date": "2002-06-11"
+              },
+              {
+                "title": "Who’s Greatest Hits",
+                "date": "1983-05-08"
+              },
+              {
+                "title": "First Singles Box",
+                "date": "2004-05-03"
+              },
+              {
+                "title": "Icon 2",
+                "date": "2011-04-05"
+              },
+              {
+                "title": "The Reaction Singles",
+                "date": "2015-08-14"
+              },
+              {
+                "title": "A Quick One",
+                "date": "1966-12-03"
+              },
+              {
+                "title": "Magic Bus / My Generation",
+                "date": "1976"
+              },
+              {
+                "title": "Live & Alive",
+                "date": "2003"
+              },
+              {
+                "title": "London 29·03·04",
+                "date": "2004-03-29"
+              },
+              {
+                "title": "1968-04-06: Live at the Fillmore East: New York, NY, USA",
+                "date": "2001"
+              },
+              {
+                "title": "2002-08-28: Live at Columbus, Ohio, USA",
+                "date": "2002"
+              },
+              {
+                "title": "The Who Live: The Blues to the Bush 1999",
+                "date": "2000"
+              },
+              {
+                "title": "A Quick One (Happy Jack) / The Who Sell Out",
+                "date": "1973"
+              },
+              {
+                "title": "The Who by Numbers",
+                "date": "1975-10-18"
+              },
+              {
+                "title": "Face Dances",
+                "date": "1981-03-16"
+              },
+              {
+                "title": "Live: Irvine 2002",
+                "date": "2002-09"
+              },
+              {
+                "title": "It’s Hard",
+                "date": "1982-09-04"
+              },
+              {
+                "title": "2002-09-24: Xcel Energy Center, St. Paul, MN, USA",
+                "date": "2002"
+              },
+              {
+                "title": "The 25 Best Songs",
+                "date": "2017-05-22"
+              },
+              {
+                "title": "The Kids Are Alright",
+                "date": "1979-06-09"
+              },
+              {
+                "title": "WHO",
+                "date": "2019-11-22"
+              },
+              {
+                "title": "The Studio Albums",
+                "date": "2012-11-16"
+              },
+              {
+                "title": "Wild Collection",
+                "date": "1997"
+              },
+              {
+                "title": "BBC Sessions",
+                "date": "2000-02-14"
+              },
+              {
+                "title": "Who’s Last",
+                "date": "1984"
+              },
+              {
+                "title": "20th Century Masters: The Millennium Collection: The Best of The Who",
+                "date": "1999-04-13"
+              },
+              {
+                "title": "Who’s Better, Who’s Best",
+                "date": "2006"
+              },
+              {
+                "title": "Meaty Beaty Big and Bouncy",
+                "date": "1971-10-30"
+              },
+              {
+                "title": "Tommy",
+                "date": "1975-03"
+              },
+              {
+                "title": "Rarities, Volume 1: “1966–1968”",
+                "date": "1983"
+              },
+              {
+                "title": "Who’s Breakthroughs",
+                "date": "2026-04-03"
+              },
+              {
+                "title": "The Who at Kilburn",
+                "date": "1977"
+              },
+              {
+                "title": "ICON",
+                "date": "2011"
+              },
+              {
+                "title": "Who Are You / The Kids Are Alright",
+                "date": "2009"
+              },
+              {
+                "title": "I’m a Boy",
+                "date": "1968-04"
+              },
+              {
+                "title": "Who’s Next",
+                "date": "1971-08-14"
+              },
+              {
+                "title": "Mountain View, California July 3, 2002",
+                "date": "2002"
+              },
+              {
+                "title": "Then and Now",
+                "date": "2004-03-30"
+              },
+              {
+                "title": "Magic Bus: The Who on Tour",
+                "date": "1968-09-14"
+              },
+              {
+                "title": "Quadrophenia",
+                "date": "1973-11-16"
+              },
+              {
+                "title": "Tommy and Quadrophenia Live With Special Guests",
+                "date": "2005"
+              },
+              {
+                "title": "The Origins",
+                "date": "2018"
+              },
+              {
+                "title": "’64–’74 / The Best of the Last Ten Years",
+                "date": "1975"
+              },
+              {
+                "title": "The Best Of",
+                "date": "2025-04-04"
+              },
+              {
+                "title": "Exciting The Who",
+                "date": "2007-02-07"
+              },
+              {
+                "title": "The Who Sell Out",
+                "date": "1967-12-16"
+              },
+              {
+                "title": "Thirty Years of Maximum R&B",
+                "date": "1994-07-05"
+              },
+              {
+                "title": "Rarities 1966–1972, Vol. I / Rarities 1970–1973, Vol. II",
+                "date": "2004"
+              },
+              {
+                "title": "2002-08-25: Live at Noblesville, Indiana, USA",
+                "date": "2002-08-25"
+              },
+              {
+                "title": "Greatest Hits Live",
+                "date": "2010-01-19"
+              },
+              {
+                "title": "Backtrack Fourteen: The Ox",
+                "date": "1970"
+              },
+              {
+                "title": "The Singles",
+                "date": "1984-11-01"
+              },
+              {
+                "title": "Live: Las Vegas Nevada",
+                "date": "2002-09-14"
+              },
+              {
+                "title": "Who’s Missing / Two’s Missing",
+                "date": "2011-01-03"
+              },
+              {
+                "title": "My Generation – The Very Best of The Who",
+                "date": "1996-08-01"
+              },
+              {
+                "title": "London 24·03·04",
+                "date": "2004-03-24"
+              },
+              {
+                "title": "Opus Collection",
+                "date": "2012"
+              },
+              {
+                "title": "Maximum As & Bs",
+                "date": "2017-10-27"
+              },
+              {
+                "title": "Hooligans",
+                "date": "1981-09-11"
+              },
+              {
+                "title": "The Story of The Who",
+                "date": "1976"
+              },
+              {
+                "title": "Rarities, Volume 2: “1970–1973”",
+                "date": "1983"
+              },
+              {
+                "title": "Best of the Sixties",
+                "date": "1982"
+              },
+              {
+                "title": "Woodstock 1969",
+                "date": "1975"
+              },
+              {
+                "title": "The Best of the Who",
+                "date": "1997"
+              },
+              {
+                "title": "Direct Hits",
+                "date": "1968"
+              },
+              {
+                "title": "Odds & Sods",
+                "date": "1974-10-12"
+              },
+              {
+                "title": "2002-07-31: Madison Square Garden, New York, NY, USA",
+                "date": "2002"
+              },
+              {
+                "title": "Who’s Better, Who’s Best",
+                "date": "1988-11-14"
+              },
+              {
+                "title": "London 25·03·04",
+                "date": "2004-03-25"
+              },
+              {
+                "title": "Who’s Best Kept Secrets",
+                "date": "2026-08-07"
+              },
+              {
+                "title": "The Who",
+                "date": "1975"
+              },
+              {
+                "title": "Greatest Hits",
+                "date": "1982"
+              },
+              {
+                "title": "London 22·03·04",
+                "date": "2004-03-22"
+              },
+              {
+                "title": "Endless Wire",
+                "date": "2006-10-27"
+              },
+              {
+                "title": "Pinball Wizard: The Collection",
+                "date": "2012-05-28"
+              },
+              {
+                "title": "Tommy: Original Broadway Cast Recording",
+                "date": "1993-07-13"
+              },
+              {
+                "title": "Essential",
+                "date": "2020"
+              },
+              {
+                "title": "The Who Hits 50!",
+                "date": "2014-10-27"
+              }
+            ],
+            "inWindow": true,
+            "truncated": true
+          }
+        },
+        {
+          "type": "movie",
+          "status": null,
+          "error": "timeout",
+          "results": [],
+          "firstResultYearCheck": null
+        },
+        {
+          "type": "tv_show",
+          "status": null,
+          "error": "timeout",
+          "results": [],
+          "firstResultYearCheck": null
+        }
+      ]
+    },
+    {
+      "label": "American soul",
+      "birthYear": 1944,
+      "hometown": "Detroit",
+      "country": "United States",
+      "favorites": [
+        "Aretha Franklin",
+        "Otis Redding"
+      ],
+      "window": {
+        "from": 1957,
+        "to": 1969
+      },
+      "resolution": [
+        {
+          "query": "Aretha Franklin",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "97053D92-D12F-4AD0-8E85-89037806B85F",
+              "name": "Aretha Franklin",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "2f9ecbed-27be-40e6-abca-6de49d50299e"
+                },
+                "spotify": {
+                  "id": "7nwUJBm0HE4ZxD3f5cy5ok"
+                }
+              }
+            },
+            {
+              "entity_id": "42F4138E-4977-498A-8F27-8294AFC06F6E",
+              "name": "Aretha Franklin and the Blues Brothers Band",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "270B2830-CEAF-41F5-87B8-02AA09D5B887",
+              "name": "Kirk Franklin",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "685332a4-12ed-4c3b-8d0e-04e6a37e28f0"
+                },
+                "spotify": {
+                  "id": "4akybxRTGHJZ1DXjLhJ1qu"
+                }
+              }
+            },
+            {
+              "entity_id": "5678B4C0-2DEE-4EDE-BE89-71F8DBBAE374",
+              "name": "Erma Franklin",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "4ba12614-fcce-462b-8784-8dd1a92fbf2b"
+                },
+                "spotify": {
+                  "id": "1CzJJJb6hnx84VNhgaJmFG"
+                }
+              }
+            },
+            {
+              "entity_id": "0AF14C93-0C4C-4A44-ABD5-9C67309C8D07",
+              "name": "Kirk Franklin and the Family",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {},
+                "spotify": {}
+              }
+            }
+          ]
+        },
+        {
+          "query": "Otis Redding",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "D7520C8C-54FB-4C75-8654-F5186898DAF4",
+              "name": "Otis Redding",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "82b1f5fd-cd31-41a9-b5d4-7e33f0eb9751"
+                },
+                "spotify": {
+                  "id": "60df5JBRRPcnSpsIMxxwQm"
+                }
+              }
+            },
+            {
+              "entity_id": "0275E0C6-CF77-4BA4-AE4D-C7F49B417F85",
+              "name": "Shuggie Otis",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "ff9542ca-7859-4db2-8796-c1e3c39b9c0a"
+                },
+                "spotify": {
+                  "id": "4YHtIE7FI8ITfekzzN5Jpl"
+                }
+              }
+            },
+            {
+              "entity_id": "1FD057A7-1018-4484-B50B-D56FC2482B5F",
+              "name": "Otis Taylor",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "f90c3011-d714-4beb-a181-1dc2b7d33239"
+                },
+                "spotify": {
+                  "id": "5Y1mtkFXBCx0dyL93Wt54T"
+                }
+              }
+            },
+            {
+              "entity_id": "29E82D70-F3FF-4199-8165-4CF591E55335",
+              "name": "Otis Rush",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "40ee7c92-f44a-4d14-9aee-f87244465ee4"
+                },
+                "spotify": {}
+              }
+            },
+            {
+              "entity_id": "1C2F0C3E-2318-482A-8CEF-BE52A8F2152F",
+              "name": "Royel Otis",
+              "types": [
+                "urn:entity:artist"
+              ],
+              "properties": {},
+              "external": {
+                "musicbrainz": {
+                  "id": "2244c1f9-773f-4541-a4fe-ee6dc4f2ce60"
+                },
+                "spotify": {}
+              }
+            }
+          ]
+        }
+      ],
+      "resolvedFavorites": 2,
+      "domains": [
+        {
+          "type": "artist",
+          "status": null,
+          "error": "timeout",
+          "results": [],
+          "firstResultYearCheck": null
+        },
+        {
+          "type": "movie",
+          "status": null,
+          "error": "timeout",
+          "results": [],
+          "firstResultYearCheck": null
+        },
+        {
+          "type": "tv_show",
+          "status": 200,
+          "results": [
+            {
+              "entity_id": "BAF55B0E-5A94-4FB1-8984-4F5153D60DC1",
+              "name": "Star",
+              "properties": {
+                "release_year": 2016,
+                "release_date": "2016-12-14",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Atlanta, Georgia, USA, Conyers, Georgia, USA",
+                "genres": [
+                  "Drama",
+                  "Music",
+                  "Musical"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "8D10727F-E1DF-43D5-BE20-B9CCF064A697",
+              "name": "Empire",
+              "properties": {
+                "release_year": 2015,
+                "release_date": "2015-01-07",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Chicago, Illinois, USA, Cinespace Chicago Film Studios, Chicago, Illinois, USA, 353 North Clark Street, Chicago, Illinois, USA",
+                "genres": [
+                  "Drama",
+                  "Music"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "DF3A93F5-CC5E-40A4-A3F8-D175CFEFAD8D",
+              "name": "Underground",
+              "properties": {
+                "release_year": 2016,
+                "release_date": "2016-03-09",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Savannah, Georgia, USA",
+                "genres": [
+                  "Adventure",
+                  "Drama",
+                  "History",
+                  "Thriller"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "3E7017CA-0FA1-4A12-9ECF-BC0F742F9667",
+              "name": "Being Mary Jane",
+              "properties": {
+                "release_year": 2013,
+                "release_date": "2013-07-02",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Los Angeles, California, USA",
+                "genres": [
+                  "Drama",
+                  "Romance",
+                  "Thriller"
+                ]
+              },
+              "external": {}
+            },
+            {
+              "entity_id": "874B5826-D257-4AF2-B24D-C721136581CE",
+              "name": "Claws",
+              "properties": {
+                "release_year": 2017,
+                "release_date": "2017-06-11",
+                "release_country": [
+                  "United States"
+                ],
+                "filming_location": "Palmetto, Florida, USA, Florida, USA, New Orleans, Louisiana, USA",
+                "genres": [
+                  "Comedy",
+                  "Crime",
+                  "Drama"
+                ]
+              },
+              "external": {}
+            }
+          ],
+          "firstResultYearCheck": {
+            "source": "TMDB",
+            "status": "not configured"
+          }
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Fictional profiles only. Taste affinity is not proof of personal preference or geographical relevance.",
+    "Geography is recorded only from returned metadata; missing evidence is unknown, not culturally relevant by assumption.",
+    "Baseline discovery is deliberately not year-filtered, to distinguish catalogue coverage from the independent era gate.",
+    "Independent providers can fail; an unavailable date is not an out-of-window date.",
+    "No playback URL is verified by this audit. Raw provider URLs, if present, are not endorsements."
+  ],
+  "finishedAt": "2026-10-27T17:23:51.686Z",
+  "requests": 19
+}

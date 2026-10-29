@@ -15,3 +15,7 @@ Smoke-tested against `https://hackathon.api.qloo.com` on 2026-10-27 using `npm r
 - Search, tags, and Insights coverage are not uniform for pre-1975 and non-US/UK material. Echoes does not substitute an LLM suggestion for a missing result: an unresolved or empty item is dropped, and the kit displays a transparent note.
 - Qloo returns entity IDs and ranking. The era bounds are sent as category-appropriate Insights filters; the interface labels all displayed choices as Qloo-matched and never claims additional historical metadata that the response did not provide.
 - Echoes now adds an independent hard gate after Qloo ranking: MusicBrainz release facts for artists and TMDB release/first-air dates for film and TV. Candidate books and places are withheld until a comparably independent date source is connected; no item without source/year evidence is shown.
+
+## 2026-10-29 constraint verification update
+
+The historical HTTP-acceptance probes above do not establish that every parameter is enforced for every entity domain. See [the measured request-constraint and feedback log](echoes-qloo-constraints-log.md) for current behavior, request changes, limitations, and retained local checks. In particular, artist year filters did not enforce a 1900 cutoff; release-country filtering changed film/TV results but not artist/book results; provider-resolved music tags supplied the effective artist-region constraint.

@@ -18,7 +18,7 @@ const { dropUnresolvedItems } = require(join(output, "verified.js"))
 const { retainEraVerifiedItems, yearEvidenceFor } = require(join(output, "year-facts.js"))
 const { draftNoteFromFacts } = require(join(output, "note.js"))
 
-test("reminiscence era is ages 13 through 25", () => assert.deepEqual(eraWindow(1942), { from: 1955, to: 1967 }))
+test("reminiscence era is ages 10 through 25", () => assert.deepEqual(eraWindow(1942), { from: 1952, to: 1967 }))
 
 test("coverage selection prioritizes items that serve every resident", () => {
   const picked = selectForCoverage([

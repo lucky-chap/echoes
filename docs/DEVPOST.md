@@ -6,7 +6,7 @@ Familiar cultural touchstones can open gentle, human moments. Caregivers and act
 
 ## What it does
 
-Echoes creates a 30-minute activity-support session kit from a first name or nickname, birth year, childhood location, language, a few loved things, and optional topics to avoid. It offers Qloo-verified music, film/TV, books, and places from the person's ages 13–25, conversation starters, a printable About Me sheet, group coverage, and feedback controls.
+Echoes creates a 30-minute activity-support session kit from a first name or nickname, birth year, childhood location, language, a few loved things, and optional topics to avoid. It offers dated music, film/TV, and books from the person's ages 10–25, conversation starters, a printable About Me sheet, and feedback controls.
 
 ## How we built it
 

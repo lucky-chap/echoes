@@ -1,0 +1,125 @@
+
+> worldlings@0.0.1 test
+> node --test --test-isolation=none tests/*.test.cjs
+
+✔ copilot uses structured tools, includes a dated favourite, and plans exactly 30 minutes (30.420393ms)
+✔ outside-window discoveries stay excluded while named favourites carry explicit exceptions (2.573254ms)
+✔ unavailable dates trigger at most one broader discovery pass and an explicit failure trace (2.31702ms)
+✔ Osibisa-era planning rejects Jambo and reports cross-domain coverage honestly (2.830083ms)
+✔ saved review changes the next session, keeps distress excluded, and never confirms a shared story (3.6212ms)
+✔ memory retrieval is resident-scoped, bounded, and excludes unconfirmed cultural discoveries (3.3839ms)
+✔ editing a plan retains 30 minutes; notes never infer participation or use historical feedback (0.320302ms)
+✔ single-resident MVP rejects group generation (0.973165ms)
+✔ positive observed memory becomes a discovery seed, never a Qloo-suggested personal fact (1.902294ms)
+✔ correcting a session activity to not used removes that session’s response memory (1.545022ms)
+✔ resident removal clears only their records, leaving another resident intact (0.297358ms)
+✔ caregiver sessions reject unknown, expired, and revoked tokens (0.851565ms)
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:47.240Z","latencyMs":20,"url":"https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Cache+Fixture+Artist%22&limit=5&fmt=json","status":503,"outcome":"http_503","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:48.265Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Cache+Fixture+Artist%22&limit=5&fmt=json","status":503,"outcome":"http_503","attempt":1,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:50.268Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Cache+Fixture+Artist%22&limit=5&fmt=json","status":503,"outcome":"http_503","attempt":2,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:54.487Z","latencyMs":1,"url":"https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Cache+Fixture+Artist%22&limit=5&fmt=json","status":503,"outcome":"http_503","attempt":3,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:55.487Z","latencyMs":2,"url":"https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Cache+Fixture+Artist%22&limit=5&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:56.488Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/release-group/?artist=fixture-artist&limit=100&offset=0&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+✔ year facts do not cache outages and never reuse another resident’s evidence IDs (9253.158834ms)
+✔ a provider URL is checked, while a failed media check is only a search instruction (1.314417ms)
+✔ protected storage encrypts data, survives reload, and fails closed on tampering (12.612206ms)
+✔ family links are scoped, one-use, revocable, expire, and do not overwrite a profile before review (0.899717ms)
+✔ protected workspace validation rejects executable media URLs (17.638407ms)
+✔ Qloo artwork accepts nested image URLs and skips unsafe or missing candidates (3.487278ms)
+✔ chosen favourites are checked before related discovery and lead the plan (1.454101ms)
+✔ a failed favourite date check is explained by name, never presented as no match (1.361058ms)
+✔ a favourite search outage and an empty result have different explanations (0.882493ms)
+✔ all ET Mensah punctuation variants resolve to the same Qloo artist (4.268355ms)
+✔ MusicBrainz serializes requests, honors Retry-After, and caps 429 retries (2.409943ms)
+✔ MusicBrainz concurrent callers cannot burst; timeouts retry; parse errors remain unavailable (1.597777ms)
+✔ unavailable checks do not imply thin evidence; retry updates only failed items in place (3.670817ms)
+✔ ambiguous candidates produce a pick list and a remembered choice resolves it (0.236238ms)
+✔ MusicBrainz aliases expand Qloo resolution without a hardcoded artist mapping (0.377706ms)
+✔ Profile C keeps later Daddy Lumba dates out and shows completed thin coverage (0.410069ms)
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:57.488Z","latencyMs":1,"url":"https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Offline+Fixture%22&limit=5&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:58.489Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/release-group/?artist=offline-artist&limit=100&offset=0&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+✔ persistent date facts replay offline with current resident evidence and cached labels (1946.819897ms)
+✔ name comparison handles spacing, punctuation, ampersands and diacritics (0.515018ms)
+✔ final 429 failures become unchecked_unavailable in the plan (1.033025ms)
+✔ demo startup warns about missing warm cache without fetching (0.545047ms)
+✔ a real-shaped Qloo result is shared across normalized spellings offline (0.836415ms)
+✔ merged legacy notes survive request parsing and reach the planner trace and About Me (1.849448ms)
+✔ preferences need confirmation for the current notes and response imports are bounded and merged (0.815361ms)
+✔ per-seed ranking traces history, penalizes slow ballads, and reserves screen media (5.275391ms)
+✔ named favourite childhood/outside dates survive with labels; discoveries remain strict (1.617461ms)
+✔ searches deduplicate eponymous works and primary actions reject legacy artist pages (0.465595ms)
+✔ prompt validation rejects template repetition, quizzes and unsupported wedding context (2.063189ms)
+✔ rendered plan reasons have no repeated punctuation or spaces, with distinct item prompts (1.802115ms)
+✔ not-for-us review writes trait history without excluding the whole artist (1.318824ms)
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:08:59.490Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/release-group/?artist=20000000-0000-4000-8000-000000000001&limit=100&offset=0&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:09:00.491Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/release-group/?artist=20000000-0000-4000-8000-000000000002&limit=100&offset=0&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+✔ MusicBrainz prefers original release groups and identifies compilation-only dates (1982.268439ms)
+✔ successful ambiguous TMDB responses replay offline without becoming outages (0.751057ms)
+✔ discoveries require actual origin, language, availability or producing-seed genre evidence (0.588434ms)
+✔ title and theme avoid rules catch funeral hymns without treating awards as hospital wards (0.841089ms)
+✔ regional discoveries reach the running order, Spanish notes become content, and unrelated TV stays out (3.169766ms)
+✔ Twi invitations show an English line and confirmed logistics remain on review data (0.271884ms)
+✔ books are conversation activities without playback links and templates do not repeat (0.319398ms)
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:09:01.491Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/release-group/?artist=30000000-0000-4000-8000-000000000001&limit=100&offset=0&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:09:02.491Z","latencyMs":1,"url":"https://musicbrainz.org/ws/2/release/?release-group=early&limit=1&status=official&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+{"provider":"MusicBrainz","startedAt":"2026-10-29T13:09:03.492Z","latencyMs":0,"url":"https://musicbrainz.org/ws/2/release/?release-group=popular&limit=1&status=official&fmt=json","status":200,"outcome":"ok","attempt":0,"userAgent":"Echoes/0.1 (contact: tests@example.invalid)"}
+✔ track choice prefers popular original singles over earliest, self-titled, compilation and unsafe works (2994.660808ms)
+✔ TV series use first and last air overlap and retain the original start year (0.971962ms)
+✔ Qloo requests carry supported era and region constraints without applying place filters to media (4.023703ms)
+✔ Qloo exact regional tag resolution accepts provider id and legacy tag_id and rejects other domains (1.592913ms)
+✔ planner supplies country and provider-resolved music tags to discovery requests (1.184597ms)
+✔ reminiscence era is ages 10 through 25 (0.17601ms)
+✔ coverage selection prioritizes items that serve every resident (0.330045ms)
+✔ distressed feedback persists as a resident-specific exclusion (0.136921ms)
+✔ unresolved entities are dropped before a kit can render (0.086104ms)
+✔ an item outside every reminiscence window is dropped (0.143968ms)
+✔ every retained item carries independent year evidence (0.17517ms)
+✔ session-note draft is grounded in recorded taps (0.18463ms)
+✔ Groq prompt and semantic scene limit both allow ten beats (0.194647ms)
+✔ connected scenes split residents, visit every destination, advance days, preserve bounded memories (173.257264ms)
+✔ memory and relationship suggestions commit only after their beats; large ticks equal small ticks (76.15041ms)
+✔ schema and semantic validation reject invented actions, places, scores and ungrounded state changes (4.176253ms)
+✔ recent experiences, goals and actual cultural evidence affect local decisions (0.553898ms)
+✔ promise memory is available to later scenes, snapshot input is bounded (4.068348ms)
+✔ snapshot validation migrates oversized legacy Qloo metadata (2.856217ms)
+✔ durable server quotas count reservations, survive reloads, reject new-session bypass and fail closed (3.723743ms)
+✔ prefetch projects exact completion without committing effects and reuses one in-flight request (76.653432ms)
+✔ prefetch rejects changed state, reset, failed transport and non-live projections (14.024044ms)
+✔ compact prompts bound context while validation still sees older repeated dialogue (16.051437ms)
+✔ primary success avoids backup; 429 uses validated Cerebras, respecting isolated cooldowns and shared session cap (21.738691ms)
+✔ rolling scene budget cannot burst across a minute boundary (0.242466ms)
+✔ official Groq SDK sends strict scene requests and rejects invalid output without retries (4.39248ms)
+✔ origin checks handle Next's normalized URL and reject cross-origin/missing origins (1.452375ms)
+✔ pair, trio and solo gatherings use actual square occupancy and preserve independent activities (5.039403ms)
+✔ Luna walks into an ongoing conversation, is acknowledged, and cannot speak or receive memories remotely (2.203655ms)
+✔ early departure moves a tired resident while the other continues; departed speakers are rejected (2.181816ms)
+✔ automatic schedules retain pairs and make shared-event trio opportunities without a fixed rotation (0.433191ms)
+✔ square dispersal leads to an actual cafe pair conversation, with persisted causal action effects (11.577506ms)
+✔ unavailable venue speech stays silent and cannot fabricate action effects (0.793111ms)
+✔ pending venue visits migrate and reject duplicate attendance and invented venues (6.543309ms)
+✔ a rate-limited venue visit reaches the cafe, preserves its roster, and can resume speech (1.261516ms)
+✔ a ten-beat venue scene survives save and restore for the next request (3.508131ms)
+✔ per-resident scene budget stays below 6 each and 25 total per fake minute (0.453495ms)
+✔ a due venue plan is honored with venue occupancy and a late arrival (1.473624ms)
+✔ the first two simulated days include a real three-resident planned gathering (1.059438ms)
+✔ a verified Qloo discovery can produce an invitation, movement, experience, and taste update (0.854324ms)
+✔ normalized exact and near duplicates reject cross-speaker reuse and six-line sequences (6.133412ms)
+✔ grounding rejects imaginary callbacks, quotations, unknown evidence, forward replies and unfinished closure (6.737525ms)
+✔ engine preserves intended speakers and records only completed scenes, with bounded history and topic cooldown (28.842769ms)
+✔ repetition gets one fresh-angle retry, all failures remain bounded, and quota failure stops requests (3.174763ms)
+✔ fallback advances independent activities without dialogue, invented social memories, or stale scene replay (4.715057ms)
+✔ three consecutive SDK fixture scenes keep a thread, distinct voices, endings and bounded recent context (22.719746ms)
+✔ Qloo client pins the hackathon host, authenticates server-side, validates entities, and caches real responses (3.526509ms)
+✔ Qloo client reports configuration, authentication, rate-limit, and empty-result failures without mock data (1.195334ms)
+✔ each resident resolves independent Qloo seeds and later liked experiences become future signals (5.004372ms)
+✔ pixel renderer preserves finite integer drawing coordinates for all residents (7.936221ms)
+✔ movement routes end at real map destinations and the square (0.55917ms)
+✔ audio remains lazy, independently mutable, and disposable (1.402523ms)
+ℹ tests 100
+ℹ suites 0
+ℹ pass 100
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22337.615225

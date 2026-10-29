@@ -1,0 +1,120 @@
+{
+  "observedAt": "2026-10-28",
+  "baseline": [
+    {
+      "provider": "MusicBrainz",
+      "startedAt": "2026-10-28T18:29:41.281Z",
+      "latencyMs": 797,
+      "url": "https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Osibisa%22&fmt=json&limit=5",
+      "status": 503,
+      "outcome": "http_503",
+      "userAgent": "EchoesCareActivity/1.0 (release-date verification)"
+    },
+    {
+      "provider": "MusicBrainz",
+      "startedAt": "2026-10-28T18:29:42.380Z",
+      "latencyMs": 298,
+      "url": "https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Jim+Reeves%22&fmt=json&limit=5",
+      "status": 200,
+      "outcome": "ok",
+      "userAgent": "EchoesCareActivity/1.0 (release-date verification)"
+    },
+    {
+      "provider": "MusicBrainz",
+      "startedAt": "2026-10-28T18:29:49.120Z",
+      "latencyMs": 303,
+      "url": "https://musicbrainz.org/ws/2/artist/?query=artist%3A%22Bobbie+Gentry%22&fmt=json&limit=5",
+      "status": 503,
+      "outcome": "http_503",
+      "userAgent": "EchoesCareActivity/1.0 (release-date verification)"
+    }
+  ],
+  "coldProfileA": {
+    "requests": 8,
+    "minimumStartGapMs": 1840,
+    "allAtLeastOneSecond": true,
+    "contactEmailRedacted": true,
+    "requestsLog": [
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:17.493Z",
+        "latencyMs": 1328,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=b1355867-16a1-4863-ae3b-6a8be122eaaa&limit=100&offset=0&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:19.333Z",
+        "latencyMs": 3582,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=23c8fdc8-e593-48df-87f4-df448a85ba43&limit=100&offset=0&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:22.917Z",
+        "latencyMs": 3885,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=2c05faf7-5cc8-4476-9daa-d177ad75cd34&limit=100&offset=0&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:26.805Z",
+        "latencyMs": 3974,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=2c05faf7-5cc8-4476-9daa-d177ad75cd34&limit=100&offset=100&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:30.780Z",
+        "latencyMs": 4118,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=2c05faf7-5cc8-4476-9daa-d177ad75cd34&limit=100&offset=200&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:34.900Z",
+        "latencyMs": 5941,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=2c05faf7-5cc8-4476-9daa-d177ad75cd34&limit=100&offset=300&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:40.845Z",
+        "latencyMs": 6545,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=2c05faf7-5cc8-4476-9daa-d177ad75cd34&limit=100&offset=400&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      },
+      {
+        "provider": "MusicBrainz",
+        "startedAt": "2026-10-28T18:46:55.585Z",
+        "latencyMs": 5117,
+        "url": "https://musicbrainz.org/ws/2/release-group/?artist=a5106366-6368-4a02-a580-73a3c02abb2f&limit=100&offset=0&fmt=json",
+        "status": 200,
+        "outcome": "ok",
+        "attempt": 0,
+        "userAgent": "Echoes/0.1 (contact: $MUSICBRAINZ_CONTACT_EMAIL)"
+      }
+    ]
+  }
+}

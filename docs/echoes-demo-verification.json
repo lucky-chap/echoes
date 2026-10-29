@@ -1,0 +1,102 @@
+{
+  "realProviderData": true,
+  "networkDisabled": true,
+  "profiles": [
+    {
+      "profileId": "demo-efua",
+      "profile": "Efua",
+      "resolved": 3,
+      "dated": 3,
+      "failed": 0,
+      "level": "partial",
+      "resolutionPending": 0,
+      "items": [
+        {
+          "name": "Osibisa",
+          "year": 1971,
+          "source": "MusicBrainz",
+          "cached": true
+        },
+        {
+          "name": "Jim Reeves",
+          "year": 1964,
+          "source": "MusicBrainz",
+          "cached": true
+        },
+        {
+          "name": "Bobbie Gentry",
+          "year": 1971,
+          "source": "MusicBrainz",
+          "cached": true
+        }
+      ],
+      "completePlan": true,
+      "checked": 4,
+      "networkCalls": 0,
+      "pending": [],
+      "cacheKeys": 11
+    },
+    {
+      "profileId": "demo-ray",
+      "profile": "Ray",
+      "resolved": 3,
+      "dated": 3,
+      "failed": 3,
+      "level": "partial",
+      "resolutionPending": 0,
+      "items": [
+        {
+          "name": "Frank Sinatra",
+          "year": 1961,
+          "source": "MusicBrainz",
+          "cached": true
+        },
+        {
+          "name": "Otis Redding",
+          "year": 1966,
+          "source": "MusicBrainz",
+          "cached": true
+        },
+        {
+          "name": "Ben E. King",
+          "year": 1965,
+          "source": "MusicBrainz",
+          "cached": true
+        }
+      ],
+      "completePlan": true,
+      "checked": 5,
+      "networkCalls": 0,
+      "pending": [
+        {
+          "name": "The Andy Griffith Show",
+          "reason": "No cached film/TV date is available while offline."
+        },
+        {
+          "name": "The Sound of Music",
+          "reason": "No cached film/TV date is available while offline."
+        },
+        {
+          "name": "Mary Poppins",
+          "reason": "No cached film/TV date is available while offline."
+        }
+      ],
+      "cacheKeys": 23
+    },
+    {
+      "profileId": "demo-kofi",
+      "profile": "Kofi",
+      "resolved": 1,
+      "dated": 0,
+      "failed": 0,
+      "level": "thin",
+      "resolutionPending": 0,
+      "items": [],
+      "completePlan": true,
+      "checked": 1,
+      "networkCalls": 0,
+      "pending": [],
+      "cacheKeys": 3
+    }
+  ]
+}

@@ -11,7 +11,9 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-isolation=none tests/*.test.cjs",
-    "qloo:smoke": "node scripts/qloo-smoke.mjs"
+    "qloo:smoke": "node scripts/qloo-smoke.mjs",
+    "warm-demo": "node scripts/warm-demo.cjs",
+    "check-demo-offline": "node scripts/warm-demo.cjs --offline"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

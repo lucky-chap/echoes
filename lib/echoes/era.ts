@@ -1,7 +1,13 @@
 import type { KitItem, ResidentInput } from "./types"
 
+export const REMINISCENCE_ERA_START_AGE = 10
+export const REMINISCENCE_ERA_END_AGE = 25
+
 export function eraWindow(birthYear: number) {
-  return { from: birthYear + 13, to: birthYear + 25 }
+  return {
+    from: birthYear + REMINISCENCE_ERA_START_AGE,
+    to: birthYear + REMINISCENCE_ERA_END_AGE,
+  }
 }
 
 export function sharedEraWindow(residents: ResidentInput[]) {
