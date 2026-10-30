@@ -2,73 +2,7 @@ require("./echoes-runtime.cjs")
 const fs = require("node:fs")
 const { generateSessionKit } = require("../lib/echoes/pipeline.ts")
 const { EchoesQlooClient } = require("../lib/echoes/qloo.ts")
-const { emptyPreferences } = require("../lib/echoes/preferences.ts")
-const specs = [
-  [
-    "Dorothy",
-    1944,
-    "Memphis",
-    "United States",
-    "English",
-    ["Aretha Franklin", "Elvis Presley", "I Love Lucy"],
-    ["funeral hymns", "hospital scenes"],
-    ["Enjoys choir singing", "Enjoys tea"],
-  ],
-  [
-    "Yaw",
-    1946,
-    "Kumasi",
-    "Ghana",
-    "Twi (understands English)",
-    ["Nana Ampadu", "E.T. Mensah", "Jim Reeves"],
-    [],
-    ["Enjoys proverbs", "Enjoys radio dramas"],
-  ],
-  [
-    "Carmen",
-    1948,
-    "Havana",
-    "Cuba",
-    "Spanish",
-    ["Celia Cruz", "Beny Moré", "Gloria Estefan"],
-    ["politics", "leaving Cuba"],
-    ["Enjoys dancing", "Enjoys cooking"],
-  ],
-]
-// Explicit test-fixture notes, not inferred biography.
-const profiles = specs.map(
-  ([
-    nickname,
-    birthYear,
-    hometown,
-    country,
-    language,
-    lovedThings,
-    sensitivities,
-    liked_traits,
-  ]) => {
-    const logistics = nickname === "Yaw" ? ["Sit on his left"] : []
-    const notes = [...liked_traits, ...logistics].join(". ") + "."
-    return {
-      id: "acceptance-" + nickname.toLowerCase(),
-      nickname,
-      birthYear,
-      hometown,
-      country,
-      language,
-      lovedThings,
-      sensitivities,
-      notes,
-      preferences: {
-        ...emptyPreferences(),
-        confirmed: true,
-        sourceNotes: notes,
-        liked_traits,
-        logistics,
-      },
-    }
-  }
-)
+const { reliabilityDemoProfiles: profiles } = require("../lib/echoes/demo-profiles.ts")
 module.exports = { profiles }
 if (require.main === module)
   (async () => {

@@ -2,7 +2,7 @@ import { invitation } from "./language"
 import { avoidMatch } from "./suitability"
 import type { Activity, KitItem, MemoryRecord, ResidentInput } from "./types"
 import { confirmedPreferences } from "./preferences"
-import { sentences } from "./text"
+import { sentences, logisticsSentence } from "./text"
 
 export function promptConflicts(prompt: string, resident?: ResidentInput) {
   const dislikes = resident
@@ -23,79 +23,98 @@ export function itemPrompt(item: KitItem, index = 0, resident?: ResidentInput) {
     item.yearEvidence.workType === "album"
       ? `the album “${title}”`
       : `“${title}”`
-  const prompts = music
-    ? [
-        [
-          `Tap along to ${label}, or simply listen`,
-          `Puede marcar el ritmo de «${title}», o simplemente escuchar`,
-          `Wo pɛ a, bɔ «${title}» so; anaa tie kɛkɛ`,
-        ],
-        [
-          `Try humming a little of ${label}, or rest your voice`,
-          `Puede tararear un poco de «${title}», o descansar la voz`,
-          `Wo pɛ a, to «${title}» kakra; anaa home`,
-        ],
-        [
-          `Listen for the instruments in ${label}, or enjoy a quiet pause`,
-          `Escuche los instrumentos de «${title}», o descanse un momento`,
-          `Tie nnwontode a ɛwɔ «${title}» mu; anaa home kakra`,
-        ],
-        [
-          `Choose a comfortable volume for ${label}, or we can stop here`,
-          `Elija un volumen cómodo para «${title}», o podemos parar aquí`,
-          `Ma yɛnte «${title}» brɛoo; anaa yɛnnyae ha`,
-        ],
-        [
-          `Stay with a short part of ${label}, or choose quiet company`,
-          `Podemos escuchar un poco de «${title}», o estar en silencio`,
-          `Yɛntie «${title}» kakra; anaa yɛntena komm`,
-        ],
-      ]
-    : book
+  const prompts =
+    music && item.yearEvidence.artistLevel
       ? [
           [
-            `We can talk about the title “${title}”, or choose another topic`,
-            `Podemos hablar del título «${title}», o elegir otro tema`,
-            `Yebetumi aka edin «${title}» ho asɛm; anaa yɛafa asɛm foforo`,
+            `Put on some ${item.name}, or choose quiet company`,
+            `Puede poner algo de ${item.name}, o elegir compañía tranquila`,
+            `Wo pɛ a, bɔ ${item.name} nnwom bi; anaa yɛntena komm`,
           ],
           [
-            `Choose whether to talk about “${title}” now, or put it aside`,
-            `Puede elegir hablar de «${title}» ahora, o dejarlo a un lado`,
-            `Paw sɛ yɛnka «${title}» ho asɛm seesei; anaa yɛnnyae`,
+            `Choose a ${item.name} song together, or simply rest`,
+            `Pueden elegir juntos una canción de ${item.name}, o descansar`,
+            `Momfa ${item.name} nnwom bi; anaa monhome`,
           ],
           [
-            `Point out a colour on the cover of “${title}”, or leave it closed`,
-            `Puede señalar un color de la portada de «${title}», o dejarlo cerrado`,
-            `Kyerɛ ahosuo bi wɔ «${title}» nhoma no akyi; anaa yɛnnyae`,
-          ],
-          [
-            `Say whether the title “${title}” interests you, or choose quiet company`,
-            `Puede decir si le interesa el título «${title}», o estar en silencio`,
-            `Ka sɛ wopɛ edin «${title}» no; anaa yɛntena komm`,
-          ],
-          [
-            `Take a look at the cover of “${title}” if available, or leave the book aside`,
-            `Puede mirar la portada de «${title}» si está disponible, o dejar el libro a un lado`,
-            `Wo pɛ a, hwɛ «${title}» nhoma no akyi; anaa yɛnnyae`,
+            `Listen to a little ${item.name}, or leave the music for later`,
+            `Puede escuchar un poco de ${item.name}, o dejar la música para después`,
+            `Tie ${item.name} kakra; anaa yɛnnyae mma akyiri`,
           ],
         ]
-      : [
-          [
-            `Look at the setting in “${title}”, or skip this clip`,
-            `Puede mirar el escenario de «${title}», o saltar este vídeo`,
-            `Hwɛ baabi a «${title}» kɔ so; anaa yɛnnyae`,
-          ],
-          [
-            `Watch the people in “${title}”, or simply rest`,
-            `Puede observar a las personas de «${title}», o descansar`,
-            `Hwɛ nnipa a wɔwɔ «${title}» mu; anaa home`,
-          ],
-          [
-            `We can watch a short part of “${title}”, or turn the screen off`,
-            `Podemos ver un poco de «${title}», o apagar la pantalla`,
-            `Yebetumi ahwɛ «${title}» kakra; anaa yɛadum no`,
-          ],
-        ]
+      : music
+        ? [
+            [
+              `Tap along to ${label}, or simply listen`,
+              `Puede marcar el ritmo de «${title}», o simplemente escuchar`,
+              `Wo pɛ a, bɔ «${title}» so; anaa tie kɛkɛ`,
+            ],
+            [
+              `Try humming a little of ${label}, or rest your voice`,
+              `Puede tararear un poco de «${title}», o descansar la voz`,
+              `Wo pɛ a, to «${title}» kakra; anaa home`,
+            ],
+            [
+              `Listen for the instruments in ${label}, or enjoy a quiet pause`,
+              `Escuche los instrumentos de «${title}», o descanse un momento`,
+              `Tie nnwontode a ɛwɔ «${title}» mu; anaa home kakra`,
+            ],
+            [
+              `Keep the beat with one hand during ${label}, or let your hands rest`,
+              `Puede seguir el ritmo con una mano durante «${title}», o simplemente escuchar`,
+              `Wo pɛ a, fa wo nsa di «${title}» sanku no akyi; anaa tie kɛkɛ`,
+            ],
+            [
+              `Stay with a short part of ${label}, or choose quiet company`,
+              `Podemos escuchar un poco de «${title}», o estar en silencio`,
+              `Yɛntie «${title}» kakra; anaa yɛntena komm`,
+            ],
+          ]
+        : book
+          ? [
+              [
+                `We can talk about the title “${title}”, or choose another topic`,
+                `Podemos hablar del título «${title}», o elegir otro tema`,
+                `Yebetumi aka edin «${title}» ho asɛm; anaa yɛafa asɛm foforo`,
+              ],
+              [
+                `Choose whether to talk about “${title}” now, or put it aside`,
+                `Puede elegir hablar de «${title}» ahora, o dejarlo a un lado`,
+                `Paw sɛ yɛnka «${title}» ho asɛm seesei; anaa yɛnnyae`,
+              ],
+              [
+                `Point out a colour on the cover of “${title}”, or leave it closed`,
+                `Puede señalar un color de la portada de «${title}», o dejarlo cerrado`,
+                `Kyerɛ ahosuo bi wɔ «${title}» nhoma no akyi; anaa yɛnnyae`,
+              ],
+              [
+                `Say whether the title “${title}” interests you, or choose quiet company`,
+                `Puede decir si le interesa el título «${title}», o estar en silencio`,
+                `Ka sɛ wopɛ edin «${title}» no; anaa yɛntena komm`,
+              ],
+              [
+                `Take a look at the cover of “${title}” if available, or leave the book aside`,
+                `Puede mirar la portada de «${title}» si está disponible, o dejar el libro a un lado`,
+                `Wo pɛ a, hwɛ «${title}» nhoma no akyi; anaa yɛnnyae`,
+              ],
+            ]
+          : [
+              [
+                `Look at the setting in “${title}”, or skip this clip`,
+                `Puede mirar el escenario de «${title}», o saltar este vídeo`,
+                `Hwɛ baabi a «${title}» kɔ so; anaa yɛnnyae`,
+              ],
+              [
+                `Watch the people in “${title}”, or simply rest`,
+                `Puede observar a las personas de «${title}», o descansar`,
+                `Hwɛ nnipa a wɔwɔ «${title}» mu; anaa home`,
+              ],
+              [
+                `We can watch a short part of “${title}”, or turn the screen off`,
+                `Podemos ver un poco de «${title}», o apagar la pantalla`,
+                `Yebetumi ahwɛ «${title}» kakra; anaa yɛadum no`,
+              ],
+            ]
   const allowed = prompts.filter((row) => !promptConflicts(row[0], resident))
   const row = allowed[index % allowed.length]
   return invitation(resident, row[0], row[1], row[2])
@@ -114,6 +133,13 @@ export function promptTemplate(prompt: string, items: KitItem[]) {
     .replace(/\s+/g, " ")
     .trim()
 }
+export function promptTail(prompt: string) {
+  return prompt
+    .split(/, or |; or /i)
+    .at(-1)!
+    .trim()
+    .toLowerCase()
+}
 export function replacementPrompt(
   item: KitItem,
   activities: Activity[],
@@ -125,7 +151,8 @@ export function replacementPrompt(
     !promptConflicts(item.prompt, resident) &&
     !activities.some(
       (a) =>
-        promptTemplate(a.prompt, pool) === promptTemplate(item.prompt!, pool)
+        promptTemplate(a.prompt, pool) === promptTemplate(item.prompt!, pool) ||
+        promptTail(a.prompt) === promptTail(item.prompt!)
     )
   )
     return item.prompt
@@ -134,9 +161,14 @@ export function replacementPrompt(
       .filter((a) => a.kind === "media")
       .map((a) => promptTemplate(a.prompt, pool))
   )
+  const usedTails = new Set(activities.map((a) => promptTail(a.prompt)))
   for (let index = 0; index < 5; index++) {
     const prompt = itemPrompt({ ...item, prompt: undefined }, index, resident)
-    if (!used.has(promptTemplate(prompt, pool))) return prompt
+    if (
+      !used.has(promptTemplate(prompt, pool)) &&
+      !usedTails.has(promptTail(prompt))
+    )
+      return prompt
   }
   return `What would you choose next after “${item.name}”, including the option to stop here?`
 }
@@ -145,22 +177,37 @@ export function followThread(
   activities: Activity[],
   resident?: Pick<ResidentInput, "language">
 ) {
-  const names = activities
-    .filter((a) => a.itemId)
-    .map((a) => a.title)
-    .slice(-2)
+  const media = activities.filter((a) => a.itemId)
+  const related = [...media]
+    .reverse()
+    .map((last) => {
+      const link = last.rationale.match(
+        /(?:Because you chose|Suggested from) ([^.]+?)(?:,|\.)/
+      )?.[1]
+      return [
+        last,
+        ...media.filter(
+          (other) =>
+            other.id !== last.id &&
+            Boolean(link) &&
+            (other.title === link || other.rationale.includes(link!))
+        ),
+      ]
+    })
+    .find((pair) => pair.length > 1)
+  const names = (related?.slice(0, 2) ?? []).map((a) => a.title)
   const titles = names.map((n) => `“${n}”`).join(" / ")
   return invitation(
     resident,
     names.length
       ? `Choose between ${titles} for another short moment, or enjoy quiet company`
-      : "Choose a topic you enjoy, or we can sit quietly",
+      : "Choose more music, more conversation, or quiet company",
     names.length
       ? `Puede elegir ${titles} para un momento más, o descansar en silencio`
-      : "Puede elegir un tema que le guste, o podemos estar en silencio",
+      : "Puede elegir más música, más conversación o compañía tranquila",
     names.length
       ? `Paw ${titles} mu biako bio; anaa yɛntena komm`
-      : "Paw asɛm a wopɛ; anaa yɛntena komm"
+      : "Paw nnwom bio, nkɔmmɔ bio, anaa ma yɛntena komm"
   )
 }
 export function rebalancePlan(
@@ -262,6 +309,18 @@ export function planSession(
   memories: MemoryRecord[]
 ): Activity[] {
   const preferences = confirmedPreferences(resident)
+  const confirmedNotes =
+    preferences.confirmed && preferences.sourceNotes === resident.notes
+      ? (resident.notes ?? "")
+          .split(/[.!?]/)
+          .filter(
+            (sentence) =>
+              !/\b(avoid|dislike|does not|doesn’t|never|no longer)\b/i.test(
+                sentence
+              ) && !avoidMatch(sentence, resident.sensitivities)
+          )
+          .join(". ")
+      : ""
   const short = /short|pause|break/i.test(preferences.format_prefs.join(" "))
   const selected = items.slice(0, 4)
   const screen = items.find((i) => i.kind === "film" || i.kind === "television")
@@ -272,6 +331,23 @@ export function planSession(
     const at = selected.findLastIndex((i) => i !== screen)
     if (at >= 0) selected.splice(at, 1, discovery)
   }
+  const screenDiscovery = items.find(
+    (i) => !i.namedFavorite && (i.kind === "television" || i.kind === "film")
+  )
+  const favoriteScreen = selected.find(
+    (i) => i.namedFavorite && (i.kind === "television" || i.kind === "film")
+  )
+  const earlierScreenUseful =
+    favoriteScreen &&
+    (favoriteScreen.yearEvidence.firstAirYear ??
+      favoriteScreen.yearEvidence.year) >
+      resident.birthYear + 17.5
+  if (
+    screenDiscovery &&
+    !selected.includes(screenDiscovery) &&
+    (!favoriteScreen || earlierScreenUseful)
+  )
+    selected.push(screenDiscovery)
   const noteTopics: [RegExp, string, string, string, string][] = [
     [
       /danc/i,
@@ -316,20 +392,54 @@ export function planSession(
       "Ka aduan a wopɛ sɛ wonoa; anaa yɛnnyae mma akyiri",
     ],
   ]
-  const noteActivities: Activity[] = noteTopics
-    .filter(
-      ([pattern, topic, prompt]) =>
-        preferences.liked_traits.some(
-          (t) => pattern.test(t) && !avoidMatch(t, resident.sensitivities)
-        ) &&
-        !avoidMatch(topic, resident.sensitivities) &&
-        !promptConflicts(prompt, resident)
-    )
-    .slice(0, 2)
+  const matchedNoteTopics = noteTopics.filter(
+    ([pattern, topic, prompt]) =>
+      preferences.liked_traits.some(
+        (t) => pattern.test(t) && !avoidMatch(t, resident.sensitivities)
+      ) &&
+      !avoidMatch(topic, resident.sensitivities) &&
+      !promptConflicts(prompt, resident)
+  )
+  const movementNotes = matchedNoteTopics.filter(([, topic]) =>
+    /dancing|singing/.test(topic)
+  )
+  const noteActivities: Activity[] = matchedNoteTopics
+    .filter(([, topic]) => !/dancing|singing/.test(topic))
+    .slice(0, Math.max(0, 2 - movementNotes.length))
     .map(([pattern, topic, en, es, tw], i) => {
-      const note = preferences.liked_traits.find((trait) =>
-        pattern.test(trait)
-      )!
+      let note = preferences.liked_traits.find((trait) => pattern.test(trait))!
+      // Use specifics only from the notes the caregiver actually confirmed.
+      const detail =
+        topic === "cooking" &&
+        preferences.confirmed &&
+        preferences.sourceNotes === resident.notes
+          ? resident.notes
+              ?.split(/[.!?]/)
+              .find(
+                (part) =>
+                  pattern.test(part) &&
+                  /pancake|Sunday lunch/i.test(part) &&
+                  !avoidMatch(part, resident.sensitivities)
+              )
+          : undefined
+      if (detail)
+        note = /pancake/i.test(detail)
+          ? "cooking breakfast, especially pancakes"
+          : "cooking Sunday lunch"
+      if (topic === "tea") {
+        const extras = `${preferences.liked_traits.join(". ")}. ${confirmedNotes}`
+        if (/\b(pies?|school cook|school kitchen|sewing)\b/i.test(extras)) {
+          const choices = [
+            /\bpies?\b/i.test(extras) ? "a favourite pie" : "",
+            /school cook|school kitchen/i.test(extras)
+              ? "a school-kitchen story"
+              : "",
+            /sewing/i.test(extras) ? "a sewing project" : "",
+          ].filter(Boolean)
+          en = `Over tea, choose ${choices.join(" or ")}, or just enjoy your tea`
+          note += `, ${choices.join(" and ")}`
+        }
+      }
       if (/pancake/i.test(note)) {
         topic = "pancakes"
         en =
@@ -340,7 +450,7 @@ export function planSession(
       } else if (/sunday lunch/i.test(note)) {
         topic = "Sunday lunch"
         en =
-          "Name a favourite part of Sunday lunch, or we can leave the kitchen talk for later"
+          "Name a favourite part of Sunday lunch, or let’s leave the table as it is"
         es =
           "Puede nombrar una parte favorita del almuerzo del domingo, o hablar de otra cosa"
         tw = "Ka Kwasiada awia aduan bi a wopɛ; anaa yɛnnyae saa asɛm yi"
@@ -357,12 +467,32 @@ export function planSession(
         approved: false,
       }
     })
+  movementNotes.slice(0, 2).forEach(([pattern, topic, en, es, tw], index) => {
+    const music = selected.filter((item) => item.kind === "music")[index]
+    const note = preferences.liked_traits.find((trait) => pattern.test(trait))
+    if (!music || !note) return
+    if (topic === "singing" && /choir/i.test(note)) {
+      en = `With ${music.name}, hum a little the way you might in a choir, or let the singer carry the tune`
+      es = `Con ${music.name}, puede tararear como en un coro, o dejar que cante el artista`
+      tw = `${music.name} nnwom yi, wo pɛ a to kakra sɛ choir; anaa ma odwontofo no nto`
+    } else if (topic === "dancing") {
+      en = `With ${music.name}, try a small dance movement while seated, or let your feet rest`
+    }
+    music.prompt = invitation(resident, en, es, tw)
+    music.whyItFits = [
+      ...music.whyItFits,
+      sentences([`Chosen because confirmed notes mention ${note}`]),
+    ]
+  })
   const usedPrompts = new Set<string>()
+  const usedTails = new Set(noteActivities.map((a) => promptTail(a.prompt)))
   const chosenPrompt = (item: KitItem, index: number) => {
     let prompt = itemPrompt(item, index, resident)
     for (
       let offset = 0;
-      usedPrompts.has(promptTemplate(prompt, items)) && offset < 5;
+      (usedPrompts.has(promptTemplate(prompt, items)) ||
+        usedTails.has(promptTail(prompt))) &&
+      offset < 5;
       offset++
     )
       prompt = itemPrompt(
@@ -371,6 +501,7 @@ export function planSession(
         resident
       )
     usedPrompts.add(promptTemplate(prompt, items))
+    usedTails.add(promptTail(prompt))
     return prompt
   }
   return rebalancePlan(
@@ -388,7 +519,7 @@ export function planSession(
         ),
         rationale: sentences([
           "Check comfort and willingness before starting",
-          ...preferences.logistics,
+          ...preferences.logistics.map(logisticsSentence),
         ]),
         approved: false,
       },

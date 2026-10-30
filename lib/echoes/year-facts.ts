@@ -1,4 +1,4 @@
-import { avoidMatch } from "./suitability"
+import { matchedAvoidTopic } from "./suitability"
 import { eraWindow } from "./era"
 import { sameName, normalizeName } from "./names"
 import { musicBrainz, searchArtists } from "./musicbrainz"
@@ -19,6 +19,8 @@ export interface YearEvidence {
   workType?: "track" | "album" | "series"
   firstAirYear?: number
   lastAirYear?: number
+  ongoing?: boolean
+  artistLevel?: boolean
   releaseCount?: number
 }
 export interface YearResult {
@@ -30,6 +32,20 @@ export interface YearResult {
   reason: string
   context?: string
   cached?: boolean
+  ranking?: {
+    popularityCoverageIncomplete: boolean
+    decision?: string
+    minimumLead?: number
+    candidates: {
+      title: string
+      year: number
+      notable: boolean
+      releaseCount?: number
+      countStatus: "known" | "unknown" | "outside_cap"
+      widelyReleased: boolean
+      selected: boolean
+    }[]
+  }
 }
 type Fact = {
   year: number
@@ -39,6 +55,7 @@ type Fact = {
   compilation?: boolean
   primaryType?: string
   lastAirYear?: number
+  ongoing?: boolean
   releaseCount?: number
 }
 type Facts = {
@@ -52,6 +69,31 @@ const yearOf = (value: unknown) =>
   typeof value === "string" && /^\d{4}/.test(value)
     ? Number(value.slice(0, 4))
     : null
+export const MINIMUM_RELEASE_LEAD = 2
+export function trackConfidence(
+  top: { notable: boolean; releaseCount?: number },
+  second?: { releaseCount?: number }
+) {
+  if (top.notable)
+    return { artistLevel: false, reason: "Qloo notable-song match" }
+  if (top.releaseCount === undefined)
+    return {
+      artistLevel: true,
+      reason: "Top candidate official release count is unknown",
+    }
+  if (second && second.releaseCount === undefined)
+    return {
+      artistLevel: true,
+      reason: "Runner-up official release count is unknown",
+    }
+  const lead = second
+    ? top.releaseCount - second.releaseCount!
+    : top.releaseCount
+  return {
+    artistLevel: lead < MINIMUM_RELEASE_LEAD,
+    reason: `Official release lead ${lead}; required lead ${MINIMUM_RELEASE_LEAD}`,
+  }
+}
 export function musicBrainzId(entity?: EchoesEntity) {
   const external = entity?.properties.external as
     Record<string, { id?: string } | { id?: string }[]> | undefined
@@ -249,6 +291,7 @@ export async function lookupYearFact(
         let detail = readProviderCache<{
           first_air_date?: string
           last_air_date?: string
+          in_production?: boolean
         }>(detailKey)?.value
         if (
           !detail &&
@@ -275,6 +318,9 @@ export async function lookupYearFact(
                 year,
                 source: "TMDB",
                 lastAirYear,
+                ongoing:
+                  domain === "tv" &&
+                  (!lastAirYear || lastAirYear >= new Date().getFullYear()),
                 title: name,
                 url: `https://www.themoviedb.org/${domain}/${result.id}`,
               },
@@ -306,7 +352,9 @@ export async function lookupYearFact(
       )
       for (const row of singles.data["release-groups"]) {
         const year = yearOf(row["first-release-date"])
-        if (year)
+        if (year) {
+          const url = `https://musicbrainz.org/release-group/${row.id}`
+          if (facts.works.some((fact) => fact.url === url)) continue
           facts.works.push({
             year,
             title: row.title,
@@ -315,8 +363,9 @@ export async function lookupYearFact(
             compilation: row["secondary-types"]?.some((t) =>
               ["Compilation", "Live", "Remix"].includes(t)
             ),
-            url: `https://musicbrainz.org/release-group/${row.id}`,
+            url,
           })
+        }
       }
       writeProviderCache(key, facts, "MusicBrainz")
     }
@@ -326,14 +375,24 @@ export async function lookupYearFact(
         facts,
         type === "urn:entity:artist" ? "MusicBrainz" : "TMDB"
       )
-    const originals = facts.works
+    if (type === "urn:entity:tv_show")
+      for (const fact of facts.works)
+        fact.ongoing ??=
+          !fact.lastAirYear || fact.lastAirYear >= new Date().getFullYear()
+    const originals = [
+      ...new Map(facts.works.map((fact) => [fact.url, fact])).values(),
+    ]
       .filter(
         (f) =>
           !f.compilation &&
           (type !== "urn:entity:artist" || !sameName(f.title, name))
       )
-      .filter(
-        (f) => !residents.some((r) => avoidMatch(f.title, r.sensitivities))
+      .filter((f) =>
+        type === "urn:entity:artist"
+          ? !residents.some((r) =>
+              matchedAvoidTopic(f.title, r.sensitivities, true)
+            )
+          : true
       )
     const notable = Array.isArray(entity?.properties.notable_songs)
       ? (entity.properties.notable_songs as string[])
@@ -372,7 +431,7 @@ export async function lookupYearFact(
         /* An unavailable popularity index must not invalidate a verified date. */
       }
     }
-    // Reuse every already-known count, not only the current lookup shortlist.
+    // Reuse every already-known count before deciding which bounded set needs live checks.
     for (const fact of originals) {
       const url = new URL("/ws/2/release/", "https://musicbrainz.org")
       url.search = new URLSearchParams({
@@ -387,24 +446,27 @@ export async function lookupYearFact(
     }
     const widelyKnown = (f: Fact) =>
       widelyReleased.has(f.url.split("/").at(-1)!)
-    // Popularity is a selection signal, never a date source. Count editions of original single release groups.
-    const shortlist = originals
-      .filter(inWindow)
+    const countTargets = originals
+      .filter(
+        (fact) =>
+          inWindow(fact) &&
+          fact.primaryType === "Single" &&
+          fact.releaseCount === undefined
+      )
       .sort(
         (a, b) =>
-          Number(b.primaryType === "Single") -
-            Number(a.primaryType === "Single") ||
-          Number(widelyKnown(b)) - Number(widelyKnown(a)) ||
-          (b.releaseCount ?? 0) - (a.releaseCount ?? 0) ||
           Number(isNotable(b)) - Number(isNotable(a)) ||
-          a.title.localeCompare(b.title)
+          Number(widelyKnown(b)) - Number(widelyKnown(a)) ||
+          a.year - b.year
       )
-      .slice(0, 8)
+      .slice(0, 12)
+    let countFailures = 0
     if (type === "urn:entity:artist") {
       const popularitySignal = signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(6000)])
-        : AbortSignal.timeout(6000)
-      for (const fact of shortlist.filter((f) => f.primaryType === "Single")) {
+        ? AbortSignal.any([signal, AbortSignal.timeout(14_000)])
+        : AbortSignal.timeout(14_000)
+      for (const fact of countTargets) {
+        if (fact.releaseCount !== undefined) continue
         if (popularitySignal.aborted) break
         try {
           const id = fact.url.split("/").at(-1)!
@@ -413,9 +475,11 @@ export async function lookupYearFact(
             { "release-group": id, limit: "1", status: "official" },
             popularitySignal
           )
-          fact.releaseCount = result.data["release-count"] ?? 0
+          const count = result.data["release-count"]
+          if (typeof count === "number") fact.releaseCount = count
+          else countFailures++
         } catch {
-          /* Keep independently dated evidence when popularity is unavailable. */
+          countFailures++
         }
       }
     }
@@ -424,11 +488,41 @@ export async function lookupYearFact(
         Number(inWindow(b)) - Number(inWindow(a)) ||
         Number(b.primaryType === "Single") -
           Number(a.primaryType === "Single") ||
-        Number(widelyKnown(b)) - Number(widelyKnown(a)) ||
-        (b.releaseCount ?? 0) - (a.releaseCount ?? 0) ||
         Number(isNotable(b)) - Number(isNotable(a)) ||
+        Number(b.releaseCount !== undefined) -
+          Number(a.releaseCount !== undefined) ||
+        (b.releaseCount !== undefined && a.releaseCount !== undefined
+          ? b.releaseCount - a.releaseCount
+          : 0) ||
+        Number(widelyKnown(b)) - Number(widelyKnown(a)) ||
         a.year - b.year
     )
+    const popularityCoverageIncomplete =
+      type === "urn:entity:artist" &&
+      (!notable.length ||
+        countFailures > 0 ||
+        originals.some(
+          (fact) =>
+            inWindow(fact) &&
+            fact.primaryType === "Single" &&
+            fact.releaseCount === undefined
+        ))
+    const rankedSingles = originals.filter(
+      (fact) => inWindow(fact) && fact.primaryType === "Single"
+    )
+    const confidence = rankedSingles[0]
+      ? trackConfidence(
+          {
+            notable: isNotable(rankedSingles[0]),
+            releaseCount: rankedSingles[0].releaseCount,
+          },
+          rankedSingles[1]
+        )
+      : { artistLevel: false, reason: "No single available" }
+    const artistLevel =
+      type === "urn:entity:artist" &&
+      originals[0]?.primaryType === "Single" &&
+      confidence.artistLevel
     for (const fact of originals) {
       const overlapYear =
         type === "urn:entity:tv_show" && fact.lastAirYear
@@ -453,17 +547,21 @@ export async function lookupYearFact(
           status: "verified",
           evidence: {
             ...evidence,
-            title,
+            title: artistLevel ? undefined : title,
             workType:
               type === "urn:entity:tv_show"
                 ? "series"
-                : fact.primaryType === "Single"
-                  ? "track"
-                  : fact.primaryType === "Album"
-                    ? "album"
-                    : undefined,
+                : artistLevel
+                  ? undefined
+                  : fact.primaryType === "Single"
+                    ? "track"
+                    : fact.primaryType === "Album"
+                      ? "album"
+                      : undefined,
             firstAirYear: type === "urn:entity:tv_show" ? fact.year : undefined,
             lastAirYear: fact.lastAirYear,
+            ongoing: fact.ongoing,
+            artistLevel,
             releaseCount: fact.releaseCount,
             url: fact.url,
             cached,
@@ -471,9 +569,39 @@ export async function lookupYearFact(
           },
           cached,
           reason: fact.lastAirYear
-            ? `${fact.title} aired ${fact.year}–${fact.lastAirYear}, overlapping the requested era.`
-            : `${title} (${fact.year}) falls in the requested era${fact.releaseCount !== undefined ? `; selected using ${fact.releaseCount} official MusicBrainz releases` : ""}.`,
+            ? `${fact.title} aired ${fact.year}–${fact.ongoing ? "present" : fact.lastAirYear}, overlapping the requested era.`
+            : artistLevel
+              ? `${name} has in-window releases; ${confidence.reason}. Using an artist-level invitation.`
+              : `${title} (${fact.year}) falls in the requested era${fact.releaseCount !== undefined ? `; selected using ${fact.releaseCount} official MusicBrainz releases` : ""}.`,
           context: facts.context,
+          ranking:
+            type === "urn:entity:artist"
+              ? {
+                  popularityCoverageIncomplete,
+                  decision: confidence.reason,
+                  minimumLead: MINIMUM_RELEASE_LEAD,
+                  candidates: originals
+                    .filter(
+                      (candidate) =>
+                        inWindow(candidate) &&
+                        candidate.primaryType === "Single"
+                    )
+                    .map((candidate) => ({
+                      title: candidate.title,
+                      year: candidate.year,
+                      notable: isNotable(candidate),
+                      releaseCount: candidate.releaseCount,
+                      countStatus:
+                        candidate.releaseCount !== undefined
+                          ? ("known" as const)
+                          : countTargets.includes(candidate)
+                            ? ("unknown" as const)
+                            : ("outside_cap" as const),
+                      widelyReleased: widelyKnown(candidate),
+                      selected: candidate.url === fact.url,
+                    })),
+                }
+              : undefined,
         }
     }
     return {

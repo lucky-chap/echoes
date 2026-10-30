@@ -1,10 +1,18 @@
-import { unsuitable, avoidMatch, relevanceFor } from "./suitability"
+import {
+  unsuitable,
+  unsuitableReason,
+  avoidMatch,
+  matchedAvoidTopic,
+  relevanceFor,
+  cautionText,
+} from "./suitability"
 import {
   migrateResidentNotes,
   confirmedPreferences,
   traitEvidence,
 } from "./preferences"
-import { sentences } from "./text"
+import { sentences, logisticsSentence, itemDateLabel } from "./text"
+import { assignReplacements } from "./replacements"
 import { sameName } from "./names"
 import { resolveFavorite } from "./resolution"
 import { demoMode } from "./provider-cache"
@@ -69,7 +77,7 @@ function qlooPublicationYear(entity: EchoesEntity) {
 }
 export interface OrchestratorTools {
   client: Pick<EchoesQlooClient, "search" | "insights"> &
-    Partial<Pick<EchoesQlooClient, "tags">>
+    Partial<Pick<EchoesQlooClient, "tags" | "details">>
   year: typeof lookupYearFact
   media: typeof lookupMedia
   prompts?: typeof generateItemPrompts
@@ -78,7 +86,8 @@ export interface OrchestratorTools {
 export { unsuitable } from "./suitability"
 
 /** One policy-driven tool orchestrator; no pretend autonomous agents or invented tool results.
- * At most 56 tool invocations, 16 dated candidates, one discovery replan, 60s deadline.
+ * At most 64 tool invocations, 16 independent date checks plus two music swap
+ * checks, one discovery replan, and a 60s deadline.
  * Individual providers have their own shorter timeouts. Tests inject explicit fixtures.
  */
 export async function generateSessionKit(
@@ -145,7 +154,7 @@ export async function generateSessionKit(
     run: () => Promise<T>,
     describe: (value: T) => Record<string, unknown>
   ): Promise<T | null> => {
-    if (calls >= 56 || signal.aborted) {
+    if (calls >= 64 || signal.aborted) {
       trace(
         role,
         tool,
@@ -254,6 +263,7 @@ export async function generateSessionKit(
   )
   const anchors: EchoesEntity[] = []
   const favoriteNotes: string[] = []
+  const favoriteCautions = new Map<string, NonNullable<KitItem["cautions"]>>()
   let resolved = 0
   const resolutionChoices: NonNullable<SessionKit["resolutionChoices"]> = []
   for (const favorite of resident.lovedThings.slice(0, 3)) {
@@ -284,7 +294,31 @@ export async function generateSessionKit(
             import("./musicbrainz").then((m) => m.searchArtists(query, signal))
     )
     if (resolution.entity) {
-      anchors.push(resolution.entity)
+      let entity = resolution.entity
+      if (entity.type === "urn:entity:artist" && client.details) {
+        const rows = await call(
+          "Qloo Taste Explorer",
+          "qloo_insights",
+          {
+            entityId: entity.entityId,
+            purpose: "named favourite catalogue enrichment",
+          },
+          () => client.details!(entity),
+          (entities) => ({
+            count: entities.length,
+            entities,
+            summary: "Named favourite catalogue metadata",
+          })
+        )
+        const enriched = rows?.find((row) => row.entityId === entity.entityId)
+        if (enriched)
+          entity = {
+            ...entity,
+            ...enriched,
+            properties: { ...entity.properties, ...enriched.properties },
+          }
+      }
+      anchors.push(entity)
       resolved++
     } else if (resolution.candidates.length)
       resolutionChoices.push({
@@ -373,16 +407,23 @@ export async function generateSessionKit(
       (seed?.evidence === "sparked" ? 8 : 3)
     )
   }
+  const regionalTagQuery = /^united kingdom|^uk$|^great britain$/i.test(
+    resident.country.trim()
+  )
+    ? "British"
+    : /^united states|^usa?$/i.test(resident.country.trim())
+      ? "American"
+      : resident.country
   const regionalTags = client.tags
     ? ((await call(
         "Qloo Taste Explorer",
         "qloo_search",
         {
-          query: resident.country,
+          query: regionalTagQuery,
           type: "urn:tag:genre:music",
           purpose: "regional request constraint",
         },
-        () => client.tags!(resident.country, "urn:tag:genre:music"),
+        () => client.tags!(regionalTagQuery, "urn:tag:genre:music"),
         (ids) => ({
           count: ids.length,
           tagIds: ids,
@@ -404,7 +445,10 @@ export async function generateSessionKit(
     )
     for (const seedId of eligibleSeeds) {
       const seed = seedInfo(seedId)
-      for (const type of domains) {
+      const requests = domains.map((type) => ({ type, tags: [] as string[] }))
+      if (regionalTags.length)
+        requests.push({ type: "urn:entity:artist", tags: regionalTags })
+      for (const { type, tags } of requests) {
         const result = await call(
           "Qloo Taste Explorer",
           "qloo_insights",
@@ -414,7 +458,7 @@ export async function generateSessionKit(
             seed,
             era,
             country: resident.country,
-            regionalTags: type === "urn:entity:artist" ? regionalTags : [],
+            regionalTags: tags,
             excludedIds: [...excluded],
             broaden,
           },
@@ -424,7 +468,7 @@ export async function generateSessionKit(
               entityIds: [seedId],
               era,
               country: resident.country,
-              regionalTags: type === "urn:entity:artist" ? regionalTags : [],
+              regionalTags: tags,
               excludedEntityIds: [...excluded],
               broaden,
             }),
@@ -460,25 +504,42 @@ export async function generateSessionKit(
     }
   }
   const checked = new Set<string>()
+  const leftOutSeeds = new Map<
+    string,
+    { topic: string; source: "caregiver" | "conservative_default" | "feedback" }
+  >()
   const verified: KitItem[] = []
   const dateChecks: DateCheck[] = []
   const research: NonNullable<SessionKit["research"]> = []
   let unavailable = 0
   let datedCount = 0
   const verifyPool = async () => {
+    // Use provider dates to order the limited independent checks, never to approve a work.
+    const startsAfterWindow = (candidate: EchoesEntity) =>
+      candidate.type === "urn:entity:artist" && Number(candidate.properties.start_year) > era.to
     const ranked = unique(candidates)
       .filter((c) => !checked.has(c.entityId))
       .sort(
         (a, b) =>
+          Number(startsAfterWindow(a)) - Number(startsAfterWindow(b)) ||
           candidateScore(b, provenance.get(b.entityId)) -
           candidateScore(a, provenance.get(a.entityId))
       )
     // Interleave domains after the initial favourite pass so date budgets cover film and TV.
     const queue: EchoesEntity[] = []
+    const seedChecks = new Map<string, number>()
     while (ranked.length) {
       for (const type of domains) {
-        const at = ranked.findIndex((c) => c.type === type)
-        if (at >= 0) queue.push(...ranked.splice(at, 1))
+        const available = ranked.filter((c) => c.type === type)
+        const eraCandidates = available.filter((c) => !startsAfterWindow(c))
+        const key = (c: EchoesEntity) => `${type}:${provenance.get(c.entityId)?.entityId ?? "favourite"}`
+        // Give each producing seed a turn, so one favourite cannot consume all swap checks.
+        const next = (eraCandidates.length ? eraCandidates : available).sort((a, b) =>
+          type === "urn:entity:artist" ? (seedChecks.get(key(a)) ?? 0) - (seedChecks.get(key(b)) ?? 0) : 0)[0]
+        if (next) {
+          queue.push(...ranked.splice(ranked.indexOf(next), 1))
+          seedChecks.set(key(next), (seedChecks.get(key(next)) ?? 0) + 1)
+        }
       }
       if (ranked.length && !ranked.some((c) => domains.includes(c.type)))
         queue.push(...ranked.splice(0))
@@ -486,7 +547,9 @@ export async function generateSessionKit(
     if (!checked.size)
       queue.sort((a, b) => anchors.indexOf(a) - anchors.indexOf(b))
     for (const candidate of queue) {
-      if (datedCount >= 16 || checked.has(candidate.entityId)) {
+      // Reserve two additional music checks for swaps after the mixed-domain pass.
+      const dateLimit = candidate.type === "urn:entity:artist" ? 18 : 16
+      if (datedCount >= dateLimit || checked.has(candidate.entityId)) {
         trace(
           "Session Planner",
           "qloo_score",
@@ -504,20 +567,62 @@ export async function generateSessionKit(
       }
       checked.add(candidate.entityId)
       const isFavorite = anchors.some((a) => a.entityId === candidate.entityId)
-      if (
-        excluded.has(candidate.entityId) ||
-        unsuitable(candidate, resident.sensitivities)
-      ) {
-        if (isFavorite)
+      const feedbackBlocked = excluded.has(candidate.entityId)
+      const avoidReason = unsuitableReason(candidate, resident.sensitivities)
+      if (isFavorite && avoidReason && !feedbackBlocked) {
+        favoriteCautions.set(candidate.entityId, [
+          {
+            ...avoidReason,
+            topic: avoidReason.topic,
+            sourceField: avoidReason.sourceField ?? "provider metadata",
+          },
+        ])
+        trace(
+          "Response Adapter",
+          "safety_filter",
+          `Caution for named favourite ${candidate.name}: ${avoidReason.sourceField ?? "provider metadata"} matches ${avoidReason.topic}; kept because the caregiver named it.`,
+          "ok",
+          { output: { entityId: candidate.entityId, caution: avoidReason } }
+        )
+      }
+      if (feedbackBlocked || (avoidReason && !isFavorite)) {
+        const blocked = feedbackBlocked
+          ? ({ topic: "saved distress response", source: "feedback" } as const)
+          : avoidReason!
+        if (isFavorite) {
+          leftOutSeeds.set(candidate.entityId, blocked)
+          dateChecks.push({
+            entity: candidate,
+            seed: provenance.get(candidate.entityId),
+            status: "unknown_date",
+            reason:
+              blocked.source === "conservative_default"
+                ? `Held back by the conservative default for ${blocked.topic}.`
+                : blocked.source === "feedback"
+                  ? `Held back because of the ${blocked.topic}.`
+                  : `Held back because provider metadata matches ${blocked.topic}.`,
+            favorite: true,
+            checkedAt: new Date().toISOString(),
+            blocked,
+          })
           favoriteNotes.push(
-            `${candidate.name} was left out because ${excluded.has(candidate.entityId) ? "a saved distress response excludes it" : "its provider metadata matches a topic to avoid"}.`
+            blocked.source === "conservative_default"
+              ? `${candidate.name} was left out by the conservative default for ${blocked.topic}. Use Include anyway if it is suitable for this person.`
+              : blocked.source === "feedback"
+                ? `${candidate.name} was left out because of the ${blocked.topic}. Use Include anyway if it is suitable for this person.`
+                : `${candidate.name} was left out because provider metadata matches ${blocked.topic}. Use Include anyway if it is suitable for this person.`
+          )
+        }
+        if (!isFavorite && (candidate.type === "urn:entity:tv_show" || blocked.source === "conservative_default"))
+          favoriteNotes.push(
+            `${candidate.name} was left out: ${blocked.source === "conservative_default" ? "conservative default" : "provider metadata"} matched ${blocked.topic}.`
           )
         trace(
           "Response Adapter",
           "safety_filter",
-          `Excluded ${candidate.name}: saved distress or a supplied topic-to-avoid matched provider metadata.`,
+          `Excluded ${candidate.name}: ${blocked.source === "conservative_default" ? "conservative default" : blocked.topic} matched provider metadata.`,
           "excluded",
-          { output: { entityId: candidate.entityId } }
+          { output: { entityId: candidate.entityId, blocked } }
         )
         continue
       }
@@ -588,7 +693,9 @@ export async function generateSessionKit(
         )
         continue
       }
-      datedCount++
+      // Books use the publication year already in the Qloo payload; preserve the
+      // independent-provider allowance for music, film and TV checks.
+      if (candidate.type !== "urn:entity:book") datedCount++
       const bookYear =
         candidate.type === "urn:entity:book"
           ? qlooPublicationYear(candidate)
@@ -690,6 +797,26 @@ export async function generateSessionKit(
         checkedAt: new Date().toISOString(),
         cached: result?.cached,
       })
+      if (result?.ranking) {
+        trace(
+          "Cultural Researcher",
+          "qloo_score",
+          result.ranking.popularityCoverageIncomplete
+            ? `${candidate.name}: popularity coverage incomplete; ranked the checked in-window singles by Qloo notable-song match, official release count, widely-released status, then year.`
+            : `${candidate.name}: ranked in-window singles by Qloo notable-song match, official release count, widely-released status, then year.`,
+          "ok",
+          {
+            output: {
+              entityId: candidate.entityId,
+              popularityCoverageIncomplete:
+                result.ranking.popularityCoverageIncomplete,
+              candidates: result.ranking.candidates,
+              decision: result.ranking.decision,
+              minimumLead: result.ranking.minimumLead,
+            },
+          }
+        )
+      }
       trace(
         "Cultural Researcher",
         "era_verify",
@@ -734,27 +861,41 @@ export async function generateSessionKit(
         !evidence.residentIds.includes(resident.id)
       )
         continue
-      if (
-        avoidMatch(evidence.title ?? candidate.name, resident.sensitivities)
-      ) {
-        dateChecks.splice(
-          dateChecks.findIndex((c) => c.entity.entityId === candidate.entityId),
-          1
+      const workAvoid = matchedAvoidTopic(
+        evidence.title ?? candidate.name,
+        resident.sensitivities,
+        candidate.type === "urn:entity:artist" ||
+          candidate.type === "urn:entity:book"
+      )
+      if (workAvoid) {
+        const at = dateChecks.findIndex(
+          (c) => c.entity.entityId === candidate.entityId
         )
+        if (isFavorite) {
+          favoriteCautions.set(candidate.entityId, [
+            ...(favoriteCautions.get(candidate.entityId) ?? []),
+            { ...workAvoid, sourceField: "selected work title" },
+          ])
+        } else if (at >= 0) dateChecks.splice(at, 1)
         trace(
           "Response Adapter",
           "safety_filter",
-          `Held back ${candidate.name}: selected work matches an avoid rule.`,
-          "excluded",
+          `Held back ${candidate.name}: ${workAvoid.source === "conservative_default" ? "conservative default" : workAvoid.topic} matched the selected work.`,
+          isFavorite ? "ok" : "excluded",
           {
             output: {
               entityId: candidate.entityId,
               seed: provenance.get(candidate.entityId),
               reason: "work safety",
+              blocked: workAvoid,
             },
           }
         )
-        continue
+        if (!isFavorite) {
+          if (workAvoid.source === "conservative_default")
+            favoriteNotes.push(`${candidate.name} was left out by the conservative default for ${workAvoid.topic}. This is separate from the caregiver’s avoid list.`)
+          continue
+        }
       }
       const seed = provenance.get(candidate.entityId)
       const eraLabel =
@@ -767,6 +908,7 @@ export async function generateSessionKit(
         seed,
         traits: traits.traits,
         score,
+        cautions: favoriteCautions.get(candidate.entityId),
         entityId: candidate.entityId,
         name: candidate.name,
         type: candidate.type,
@@ -781,9 +923,14 @@ export async function generateSessionKit(
               ? `Because ${likedNames.get(candidate.entityId) ?? "this item"} got a response last time, it is included again.`
               : seed?.evidence === "sparked"
                 ? `Because ${resident.nickname} responded to ${seed.name} last time, we added ${candidate.name}`
-                : `Because you chose ${seed?.name ?? "a named favourite"}, Qloo suggested this ${candidate.type === "urn:entity:tv_show" ? "TV show" : kindFor(candidate.type)}. Personal familiarity is unconfirmed`,
-          `${evidence.title ?? candidate.name} (${evidence.firstAirYear && evidence.lastAirYear ? `${evidence.firstAirYear}–${evidence.lastAirYear}` : evidence.year}), dated by ${evidence.source}`,
+                : seed && leftOutSeeds.has(seed.entityId)
+                  ? `Suggested from ${seed.name}, which was left out. Personal familiarity is unconfirmed`
+                  : `Because you chose ${seed?.name ?? "a named favourite"}, Qloo suggested this ${candidate.type === "urn:entity:tv_show" ? "TV show" : kindFor(candidate.type)}. Personal familiarity is unconfirmed`,
+          evidence.artistLevel
+            ? `${candidate.name} has releases in your window: ${era.from}–${era.to}, checked by ${evidence.source}`
+            : `${evidence.title ?? candidate.name} (${itemDateLabel({ yearEvidence: evidence } as KitItem, era)}), dated by ${evidence.source}`,
           ...(eraLabel ? [eraLabel] : []),
+          ...(favoriteCautions.get(candidate.entityId) ?? []).map(cautionText),
           ...(traits.matches.length
             ? [
                 `Chosen because confirmed notes or stored responses mention ${traits.matches.join(", ")}`,
@@ -853,6 +1000,9 @@ export async function generateSessionKit(
       "No independently verified media survived. Planning a consent-led conversation and quiet-company option instead; no invented media.",
       "replanned"
     )
+  const entityById = new Map(
+    candidates.map((entity) => [entity.entityId, entity])
+  )
   // Greedy diversity ranking keeps named favourites and makes room for another domain.
   const rankedItems = [...verified].sort(
     (a, b) =>
@@ -887,6 +1037,53 @@ export async function generateSessionKit(
     if (at > 2) {
       items.splice(at, 1)
       items.splice(2, 0, screenItem)
+    }
+  }
+  const eraFitDiscovery = verified
+    .filter((item) => !item.namedFavorite && item.kind === "music")
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
+  if (eraFitDiscovery && !items.includes(eraFitDiscovery)) {
+    const replaceAt = items.findLastIndex(
+      (item) => !item.namedFavorite && item !== screenItem
+    )
+    items.splice(
+      replaceAt >= 0 ? replaceAt : items.length - 1,
+      1,
+      eraFitDiscovery
+    )
+  }
+  const screenDiscovery = verified
+    .filter(
+      (item) =>
+        !item.namedFavorite &&
+        (item.kind === "television" || item.kind === "film")
+    )
+    .sort(
+      (a, b) =>
+        Number(
+          Boolean(
+            anchors.find(
+              (seed) =>
+                seed.entityId === b.seed?.entityId && seed.type === b.type
+            )
+          )
+        ) -
+          Number(
+            Boolean(
+              anchors.find(
+                (seed) =>
+                  seed.entityId === a.seed?.entityId && seed.type === a.type
+              )
+            )
+          ) || (b.score ?? 0) - (a.score ?? 0)
+    )[0]
+  if (screenDiscovery && !items.includes(screenDiscovery)) {
+    if (items.length < 5) items.push(screenDiscovery)
+    else {
+      const at = items.findLastIndex(
+        (item) => !item.namedFavorite && item !== eraFitDiscovery
+      )
+      if (at >= 0) items.splice(at, 1, screenDiscovery)
     }
   }
   const domainCount = new Set(items.map((item) => item.kind)).size
@@ -930,6 +1127,19 @@ export async function generateSessionKit(
   const plannedIds = new Set(
     activities.flatMap((a) => (a.itemId ? [a.itemId] : []))
   )
+  for (const row of assignReplacements(
+    verified,
+    plannedIds,
+    entityById,
+    resident
+  ))
+    trace(
+      "Session Planner",
+      "qloo_score",
+      `Swap choices for ${entityById.get(row.entityId)?.name}: ${row.reason}.`,
+      "ok",
+      { output: { ...row, purpose: "replacement qualification" } }
+    )
   for (const item of verified.filter((i) => !plannedIds.has(i.entityId))) {
     trace(
       "Session Planner",
@@ -964,6 +1174,14 @@ export async function generateSessionKit(
   const discoveries = verified.filter((i) => !i.namedFavorite)
   const notes = [
     ...favoriteNotes,
+    ...(!discoveries.some(
+      (item) =>
+        plannedIds.has(item.entityId) &&
+        relevanceFor(entityById.get(item.entityId)!, undefined, resident)
+          .regional
+    )
+      ? ["Few region-specific discoveries found."]
+      : []),
     ...(discoveries.length < 2
       ? [
           `Less personalised: few items found from ${resident.country}/${era.from}–${era.to}.`,
@@ -1002,7 +1220,7 @@ export async function generateSessionKit(
     items: items.filter((i) => plannedIds.has(i.entityId)),
     alternatives: verified.filter((i) => !plannedIds.has(i.entityId)),
     activities,
-    logistics: confirmedPreferences(resident).logistics,
+    logistics: confirmedPreferences(resident).logistics.map(logisticsSentence),
     dateChecks,
     resolutionChoices,
     research,
@@ -1016,7 +1234,7 @@ export async function generateSessionKit(
         `Known favourites (caregiver): ${resident.lovedThings.join(", ")}.`,
         `Topics to avoid: ${resident.sensitivities.join(", ") || "none recorded"}.`,
         ...confirmedPreferences(resident).logistics.map(
-          (detail) => `Practical detail: ${detail}`
+          (detail) => `Practical detail: ${logisticsSentence(detail)}`
         ),
         ...(resident.notes
           ? [`Caregiver-confirmed context: ${resident.notes}`]

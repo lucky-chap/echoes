@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import type { FeedbackRecord, SessionKit } from "@/lib/echoes/types"
 import { followThread } from "@/lib/echoes/planner"
+import { itemDateLabel } from "@/lib/echoes/text"
 import { mediaSearch } from "@/lib/echoes/media"
 import MediaLinks from "./media-links"
 import QlooArtwork from "./qloo-artwork"
@@ -116,7 +117,7 @@ export default function LiveSession({
         {item && (
           <div className="live-media">
             <p className="live-evidence">
-              {item.name} · {item.yearEvidence.year} ·{" "}
+              {item.name} · {itemDateLabel(item, kit.era)} ·{" "}
               {item.yearEvidence.source}
               {item.yearEvidence.cached ? " (cached)" : ""}
             </p>

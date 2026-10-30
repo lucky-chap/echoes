@@ -74,6 +74,18 @@ const itemSchema = z.object({
   eraLabel: z.string().max(500).optional(),
   prompt: z.string().max(1500).optional(),
   score: z.number().optional(),
+  replacementIds: z.array(z.string().max(160)).max(3).optional(),
+  cautions: z
+    .array(
+      z.object({
+        topic: z.string().max(500),
+        sourceField: z.string().max(160),
+        matchedTerm: z.string().max(500).optional(),
+        source: z.enum(["caregiver", "conservative_default"]).optional(),
+      })
+    )
+    .max(5)
+    .optional(),
   entityId: z.string().max(160),
   name: z.string().max(250),
   kind: z.enum(["music", "film", "television", "book", "place"]),
@@ -98,6 +110,8 @@ const itemSchema = z.object({
     workType: z.enum(["track", "album", "series"]).optional(),
     firstAirYear: z.number().int().optional(),
     lastAirYear: z.number().int().optional(),
+    ongoing: z.boolean().optional(),
+    artistLevel: z.boolean().optional(),
     releaseCount: z.number().int().optional(),
   }),
   media: z
@@ -158,9 +172,16 @@ export const sessionKitSchema = z.object({
         favorite: z.boolean(),
         checkedAt: z.string().datetime(),
         cached: z.boolean().optional(),
+        blocked: z
+          .object({
+            topic: z.string().max(500),
+            source: z.enum(["caregiver", "conservative_default", "feedback"]),
+            sourceField: z.string().max(160).optional(),
+          })
+          .optional(),
       })
     )
-    .max(20)
+    .max(40)
     .optional(),
   resolutionChoices: z
     .array(

@@ -1,4 +1,5 @@
 "use client"
+import { itemDateLabel, logisticsSentence } from "@/lib/echoes/text"
 
 import PreferencesEditor from "./preferences-editor"
 import {
@@ -1336,7 +1337,7 @@ export default function EchoesApp() {
                               </span>
                               {item.yearEvidence && (
                                 <span className="year-evidence">
-                                  {item.yearEvidence.year} ·{" "}
+                                  {itemDateLabel(item, kit.era)} ·{" "}
                                   {item.yearEvidence.source}
                                 </span>
                               )}
@@ -1477,7 +1478,7 @@ export default function EchoesApp() {
                           {(
                             [
                               ["Session pace", kitPreferences.format_prefs],
-                              ["Practical details", kitPreferences.logistics],
+                              ["Practical details", kitPreferences.logistics.map(logisticsSentence)],
                               ["People mentioned", kitPreferences.people],
                               ["Places", kitPreferences.places],
                             ] as const

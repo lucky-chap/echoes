@@ -1233,7 +1233,7 @@ test("per-seed ranking traces history, penalizes slow ballads, and reserves scre
       )
   )
   assert(kit.activities.some((a) => a.itemId === "film"))
-  assert(kit.logistics.includes("Sit on her right"))
+  assert(kit.logistics.includes("Sit on her right."))
   assert(kit.aboutMe.details.some((d) => d.includes("Sit on her right")))
   for (const item of kit.items.filter((i) => !i.namedFavorite)) {
     assert(item.seed)
@@ -1268,7 +1268,7 @@ test("per-seed ranking traces history, penalizes slow ballads, and reserves scre
   assert(
     kit.activities
       .find((a) => a.id === "conversation")
-      .prompt.includes("Film discovery")
+      .prompt.includes("music, more conversation, or quiet company")
   )
   assert.equal(
     workspaceSchema.safeParse({
@@ -1642,12 +1642,22 @@ test("discoveries require actual origin, language, availability or producing-see
 })
 
 test("title and theme avoid rules catch funeral hymns without treating awards as hospital wards", () => {
-  const { avoidMatch, unsuitable } = require(join(output, "suitability.js"))
+  const { avoidMatch, matchedAvoidTopic, unsuitable } = require(join(output, "suitability.js"))
   assert(avoidMatch("Never Grow Old / You Grow Closer", ["funeral hymns"]))
   assert(avoidMatch("Amazing Grace", ["funeral hymns"]))
   assert(avoidMatch("A hospital scene", ["hospital scenes"]))
   assert(avoidMatch("Political revolution", ["politics"]))
   assert(avoidMatch("Exile from Cuba", ["leaving Cuba"]))
+  assert.deepEqual(matchedAvoidTopic("Amazing Grace", ["funeral hymns"]), {
+    topic: "funeral hymns",
+    source: "caregiver",
+    matchedTerm: "amazing grace",
+  })
+  assert.deepEqual(matchedAvoidTopic("A hospital ward", [], true), {
+    topic: "death, funeral or hospital themes",
+    source: "conservative_default",
+    matchedTerm: "hospital",
+  })
   assert(!avoidMatch("Many awards", ["hospital scenes"]))
   assert(
     !unsuitable(
@@ -1659,6 +1669,50 @@ test("title and theme avoid rules catch funeral hymns without treating awards as
         },
       },
       ["politics", "leaving Cuba"]
+    )
+  )
+})
+
+test("a provider keyword cautions a named favourite while the same match excludes a discovery", async () => {
+  const named = {
+    ...entity("named-keyword", "Named Keyword Artist"),
+    properties: {
+      country: "United Kingdom",
+      tags: [{ name: "Election", type: "urn:tag:keyword:media" }],
+    },
+  }
+  const discovery = {
+    ...entity("discovery-keyword", "Discovery Keyword Artist"),
+    properties: {
+      country: "United Kingdom",
+      tags: [{ name: "Election", type: "urn:tag:keyword:media" }],
+    },
+  }
+  const resident = {
+    ...person,
+    lovedThings: [named.name],
+    sensitivities: ["politics"],
+  }
+  const tools = fixtureTools()
+  tools.client.search = async () => [named]
+  tools.client.insights = async ({ type }) =>
+    type === "urn:entity:artist" ? [discovery] : []
+  const kit = await generateSessionKit({ residents: [resident], feedback: [] }, tools)
+  const favourite = [...kit.items, ...(kit.alternatives ?? [])].find(
+    (item) => item.entityId === named.entityId
+  )
+  assert(favourite)
+  assert.deepEqual(favourite.cautions, [
+    { topic: "politics", sourceField: "keywords and tags", source: "caregiver", matchedTerm: "election" },
+  ])
+  assert(
+    favourite.whyItFits.some((reason) =>
+      /Check before playing: Qloo’s keywords and tags mention “election”, and your avoid list includes politics\./.test(reason)
+    )
+  )
+  assert(
+    ![...kit.items, ...(kit.alternatives ?? [])].some(
+      (item) => item.entityId === discovery.entityId
     )
   )
 })
@@ -1721,7 +1775,9 @@ test("regional discoveries reach the running order, Spanish notes become content
   assert(kit.activities.some((a) => /baile/.test(a.prompt)))
   assert(kit.activities.some((a) => /cocinar/.test(a.prompt)))
   assert.equal(
-    kit.activities.filter((a) => a.id.startsWith("notes:")).length,
+    kit.activities.filter((a) =>
+      /Chosen because confirmed notes mention/.test(a.rationale)
+    ).length,
     2
   )
   assert.equal(
@@ -1800,6 +1856,7 @@ test("track choice prefers popular original singles over earliest, self-titled, 
     ...entity("track-choice", "Track choice"),
     properties: {
       external: { musicbrainz: { id: "30000000-0000-4000-8000-000000000001" } },
+      notable_songs: ["Amazing Grace", "Early obscure single"],
     },
   }
   global.fetch = async (url) =>
@@ -1860,12 +1917,166 @@ test("track choice prefers popular original singles over earliest, self-titled, 
       undefined,
       candidate
     )
-    assert.equal(result.evidence.title, "Popular song")
+    assert.equal(result.evidence.title, "Early obscure single")
     assert.equal(result.evidence.workType, "track")
-    assert.equal(result.evidence.releaseCount, 90)
+    assert.equal(result.evidence.releaseCount, 2)
+    assert.equal(result.ranking.popularityCoverageIncomplete, false)
+    assert.equal(
+      result.ranking.candidates.find((row) => row.title === "Early obscure single")
+        .notable,
+      true
+    )
   } finally {
     global.fetch = original
   }
+})
+
+test("missing official counts remain unknown and force an artist-level choice without Qloo notable coverage", async () => {
+  const original = global.fetch
+  const candidate = {
+    ...entity("unknown-counts", "Unknown Counts Artist"),
+    properties: {
+      external: { musicbrainz: { id: "40000000-0000-4000-8000-000000000001" } },
+    },
+  }
+  global.fetch = async (url) =>
+    String(url).includes("/artist/")
+      ? Response.json({ artists: [{ id: candidate.properties.external.musicbrainz.id, name: candidate.name }] })
+      : String(url).includes("/release/?")
+        ? Response.json({ releases: [] })
+        : Response.json({
+            "release-group-count": 2,
+            "release-groups": [
+              { id: "unknown-a", title: "First Song", "first-release-date": "1963", "primary-type": "Single" },
+              { id: "unknown-b", title: "Second Song", "first-release-date": "1966", "primary-type": "Single" },
+            ],
+          })
+  try {
+    const result = await lookupYearFact(
+      candidate.name,
+      candidate.type,
+      [person],
+      undefined,
+      candidate
+    )
+    assert.equal(result.evidence.artistLevel, true)
+    assert.equal(result.evidence.title, undefined)
+    assert.equal(result.evidence.releaseCount, undefined)
+    assert.equal(result.ranking.popularityCoverageIncomplete, true)
+    assert(
+      result.ranking.candidates.every(
+        (row) => row.releaseCount === undefined && row.countStatus === "unknown"
+      )
+    )
+  } finally {
+    global.fetch = original
+  }
+})
+
+test("single confidence uses notable evidence or a two-release lead, never unknown as zero", () => {
+  const { trackConfidence } = require(join(output, "year-facts.js"))
+  assert.equal(trackConfidence({ notable: false, releaseCount: 33 }, { releaseCount: 27 }).artistLevel, false)
+  assert.equal(trackConfidence({ notable: false, releaseCount: 21 }, { releaseCount: 19 }).artistLevel, false)
+  assert.equal(trackConfidence({ notable: false, releaseCount: 2 }, { releaseCount: 2 }).artistLevel, true)
+  assert.equal(trackConfidence({ notable: false, releaseCount: 2 }, {}).artistLevel, true)
+  assert.equal(trackConfidence({ notable: false }, { releaseCount: 0 }).artistLevel, true)
+  assert.equal(trackConfidence({ notable: true }, {}).artistLevel, false)
+})
+
+test("malformed official counts are retried, known counts survive, and real zero remains known", async () => {
+  const { createMusicBrainzClient } = require(join(output, "musicbrainz.js"))
+  const { writeProviderCache, readProviderCache } = require(join(output, "provider-cache.js"))
+  let calls = 0
+  const params = { "release-group": "cache-recovery", limit: "1", status: "official" }
+  const key = "MusicBrainz:https://musicbrainz.org/ws/2/release/?" + new URLSearchParams({ ...params, fmt: "json" })
+  writeProviderCache(key, { releases: [] }, "MusicBrainz")
+  const client = createMusicBrainzClient({ email: "test@example.invalid", queue: { tail: Promise.resolve(), nextStart: 0 }, sleep: async () => {}, log: () => {}, fetch: async () => {
+    calls++
+    return Response.json(calls === 1 ? { releases: [] } : { "release-count": 27 })
+  } })
+  await assert.rejects(client("/ws/2/release/", params), /parse_error/)
+  assert.equal(readProviderCache(key).value["release-count"], undefined)
+  assert.equal((await client("/ws/2/release/", params)).data["release-count"], 27)
+  assert.equal((await client("/ws/2/release/", params)).data["release-count"], 27)
+  assert.equal(calls, 2)
+  const zero = createMusicBrainzClient({ email: "test@example.invalid", queue: { tail: Promise.resolve(), nextStart: 0 }, sleep: async () => {}, log: () => {}, fetch: async () => Response.json({ "release-count": 0 }) })
+  assert.equal((await zero("/ws/2/release/", { ...params, "release-group": "real-zero" })).data["release-count"], 0)
+})
+
+test("artist-level badges show an era window and ongoing shows say present", () => {
+  const { itemDateLabel, logisticsSentence } = require(join(output, "text.js"))
+  const era = { from: 1956, to: 1971 }
+  assert.equal(itemDateLabel({ yearEvidence: { artistLevel: true, year: 1963 } }, era), "in your window: 1956–1971")
+  assert.equal(itemDateLabel({ yearEvidence: { firstAirYear: 1960, lastAirYear: 2026, ongoing: true } }, era), "1960–present")
+  assert.equal(logisticsSentence("sit on her right.. keep the volume low. ."), "Sit on her right. Keep the volume low.")
+})
+
+test("swaps qualify per item, require two unused options and keep soul out of rock and roll", () => {
+  const { assignReplacements, replacementSignals } = require(join(output, "replacements.js"))
+  const make = (id, kind, genre, seed) => ({ ...entity(id, id, kind === "music" ? "urn:entity:artist" : "urn:entity:tv_show"), properties: { country: person.country, genres: [genre] }, kind, seed, yearEvidence: { year: 1964 }, whyItFits: [] })
+  const lucy = make("Lucy", "television", "Sitcom"), dick = make("Dick", "television", "Sitcom", { entityId: "Lucy" }), honey = make("Honeymooners", "television", "Sitcom", { entityId: "Lucy" })
+  const jerry = make("Jerry", "music", "Rock And Roll"), chuck = make("Chuck", "music", "Rock And Roll"), elvis = make("Elvis", "music", "Rockabilly"), stevie = make("Stevie", "music", "Soul")
+  const pool = [lucy, dick, honey, jerry, chuck, elvis, stevie], entities = new Map(pool.map((e) => [e.entityId, e]))
+  const trace = assignReplacements(pool, new Set(["Lucy", "Jerry"]), entities, person)
+  assert.deepEqual(lucy.replacementIds, ["Dick", "Honeymooners"])
+  assert.deepEqual(jerry.replacementIds, ["Chuck", "Elvis"])
+  assert.deepEqual(replacementSignals(jerry, stevie, entities, person), [])
+  assert(trace.find((r) => r.entityId === "Lucy").options.every((o) => o.signals.length))
+  assignReplacements(pool, new Set(["Lucy", "Jerry", "Dick"]), entities, person)
+  assert.deepEqual(lucy.replacementIds, [])
+})
+
+test("a named screen favourite leaves room for a related screen discovery and preserves its seed label", async () => {
+  const names = ["Stevie", "Carole", "The Mary Tyler Moore Show"]
+  const tools = fixtureTools()
+  tools.client.search = async (name, type) => names.includes(name) && type === (name === names[2] ? "urn:entity:tv_show" : "urn:entity:artist") ? [entity(name, name, type)] : []
+  tools.client.insights = async ({ type, entityIds }) => type === "urn:entity:tv_show" && entityIds[0] === names[2] ? [entity("dick", "The Dick Van Dyke Show", type)] : type === "urn:entity:artist" ? [entity("music-discovery", "New music")] : []
+  const kit = await generateSessionKit({ residents: [{ ...person, lovedThings: names }], feedback: [] }, tools)
+  assert(kit.activities.some((a) => a.itemId === "dick"))
+  assert.match(kit.items.find((i) => i.entityId === "dick").whyItFits.join(" "), /Because you chose The Mary Tyler Moore Show/)
+  assert.equal(kit.activities.reduce((sum, a) => sum + a.minutes, 0), 30)
+})
+
+test("confirmed cooking specifics produce distinct invitations; unconfirmed notes supply no detail", () => {
+  const { emptyPreferences } = require(join(output, "preferences.js"))
+  const profile = (notes, trait) => ({ ...person, notes, preferences: { ...emptyPreferences(), confirmed: true, sourceNotes: notes, liked_traits: [trait] } })
+  const robert = profile("Enjoys cooking breakfast, especially pancakes.", "cooking breakfast")
+  const margaret = profile("Enjoys cooking Sunday lunch.", "cooking Sunday lunch")
+  const a = planSession(robert, [], []).find((a) => a.id === "notes:0").prompt
+  const b = planSession(margaret, [], []).find((a) => a.id === "notes:0").prompt
+  assert.match(a, /pancakes/); assert.match(b, /Sunday lunch/)
+  assert.notEqual(a.split(", or ")[1], b.split(", or ")[1])
+  assert(!JSON.stringify(planSession({ ...robert, notes: "Changed" }, [], [])).includes("pancakes"))
+  const notes = "Enjoys listening to radio dramas and cooking breakfast, especially pancakes."
+  const both = { ...robert, notes, preferences: { ...robert.preferences, sourceNotes: notes, liked_traits: ["radio dramas", "cooking breakfast"] } }
+  const prompts = planSession(both, [], []).filter((a) => a.id.startsWith("notes:")).map((a) => a.prompt)
+  assert.equal(new Set(prompts).size, 2)
+  assert(prompts.some((p) => /radio/.test(p)))
+  assert(prompts.some((p) => /pancakes/.test(p)))
+})
+
+test("era hints prioritize independent checks without approving provider-only dates", async () => {
+  const tools = fixtureTools(), checked = []
+  tools.client.insights = async ({ type }) => type === "urn:entity:artist" ? [
+    ...Array.from({ length: 20 }, (_, i) => ({ ...entity(`modern-${i}`), affinity: 1, properties: { country: person.country, start_year: 2000 } })),
+    { ...entity("era-fit"), affinity: 0.1, properties: { country: person.country, start_year: 1960 } },
+  ] : []
+  const year = tools.year
+  tools.year = async (...args) => { checked.push(args[0]); return year(...args) }
+  const kit = await generateSessionKit({ residents: [person], feedback: [] }, tools)
+  assert.equal(checked[1], "era-fit")
+  const checkedItem = [...kit.items, ...kit.alternatives].find((item) => item.entityId === "era-fit")
+  assert(checkedItem)
+  assert.equal(checkedItem.yearEvidence.source, "MusicBrainz")
+})
+
+test("storage retains bounded date checks beyond twenty so expanded kits survive reload", async () => {
+  const kit = await generateSessionKit({ residents: [person], feedback: [] }, fixtureTools())
+  kit.dateChecks = Array.from({ length: 32 }, (_, i) => ({ ...kit.dateChecks[0], entity: entity(`checked-${i}`) }))
+  const workspace = { ...createWorkspace("personal", [person]), sessions: [{ id: kit.id, createdAt: kit.createdAt, kit, feedback: [], engagement: null, noteDraft: null }] }
+  assert.equal(workspaceSchema.safeParse(workspace).success, true)
+  kit.dateChecks = Array.from({ length: 41 }, () => kit.dateChecks[0])
+  assert.equal(workspaceSchema.safeParse(workspace).success, false)
 })
 
 test("TV series use first and last air overlap and retain the original start year", async () => {
@@ -2003,7 +2214,7 @@ test("planner supplies country and provider-resolved music tags to discovery req
   const tools = fixtureTools(),
     seen = []
   tools.client.tags = async (query, type) => {
-    assert.equal(query, person.country)
+    assert.equal(query, "British")
     assert.equal(type, "urn:tag:genre:music")
     return ["urn:tag:genre:music:fixture_region"]
   }
@@ -2017,7 +2228,7 @@ test("planner supplies country and provider-resolved music tags to discovery req
   assert(
     seen
       .filter((r) => r.type === "urn:entity:artist")
-      .every((r) =>
+      .some((r) =>
         r.regionalTags.includes("urn:tag:genre:music:fixture_region")
       )
   )
@@ -2167,11 +2378,13 @@ test("Dorothy, Margaret and Robert retain two confirmed note activities and prac
       fixtureTools()
     )
     assert.equal(
-      kit.activities.filter((a) => a.id.startsWith("notes:")).length,
+      kit.activities.filter((a) =>
+        /Chosen because confirmed notes mention/.test(a.rationale)
+      ).length,
       2,
       nickname
     )
-    assert.deepEqual(kit.logistics, logistics)
+    assert.deepEqual(kit.logistics, logistics.map((detail) => detail + "."))
     assert.equal(
       kit.activities.reduce((n, a) => n + a.minutes, 0),
       30

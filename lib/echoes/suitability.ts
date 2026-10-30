@@ -2,9 +2,21 @@ import type { EchoesEntity, ResidentInput } from "./types"
 import { normalizeName } from "./names"
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+export interface AvoidMatch {
+  topic: string
+  source: "caregiver" | "conservative_default"
+  sourceField?: string
+  matchedTerm?: string
+}
+
 /** Content checks never copy biographies into resident-facing prose. */
-export function avoidMatch(text: string, sensitivities: string[]) {
-  const value = normalizeName(text)
+export function matchedAvoidTopic(
+  text: string,
+  sensitivities: string[],
+  conservativeDefault = false
+): AvoidMatch | null {
+  // Preserve word boundaries in structured provider fields before name normalisation.
+  const value = normalizeName(text.replace(/[{}\[\]":,]/g, " "))
   for (const sensitivity of sensitivities) {
     const term = normalizeName(sensitivity)
     const groups: [RegExp, RegExp][] = [
@@ -13,34 +25,108 @@ export function avoidMatch(text: string, sensitivities: string[]) {
         /funeral|burial|mourning|requiem|never grow old|amazing grace|abide with me|precious lord|take my hand|old rugged cross|nearer my god|going home|go rest high/,
       ],
       [/hospital|medical/, /\b(hospital|medical|surgery|ward|clinic)\b/],
-      [/politic/, /politic|revolution|communis|propaganda|election|dictator/],
+      [
+        /politic/,
+        /politic\w*|revolution\w*|communis\w*|propaganda|election\w*|dictator\w*/,
+      ],
       [
         /leaving cuba|exile|migration/,
         /leaving cuba|exile|emigrat|refugee|fled cuba|escape from cuba/,
       ],
     ]
-    if (
-      groups.some(([trigger, match]) => trigger.test(term) && match.test(value))
-    )
-      return true
+    for (const [trigger, pattern] of groups) {
+      const match = trigger.test(term) ? value.match(pattern) : null
+      if (match)
+        return {
+          topic: sensitivity,
+          source: "caregiver",
+          matchedTerm: match[0],
+        }
+    }
     for (const part of term.split(/\s+(?:and|or)\s+|[,/]/)) {
       const needle = part
         .replace(/\s+(songs?|themes?|content|stories|scenes|hymns)$/, "")
         .trim()
       if (needle && new RegExp(`\\b${escape(needle)}\\b`, "i").test(value))
-        return true
+        return { topic: sensitivity, source: "caregiver", matchedTerm: needle }
     }
   }
-  return false
+  if (
+    conservativeDefault &&
+    /\b(death|dead|dying|funeral|burial|mourning|requiem|hospital|infirmary|surgery|hospice|losing you|goodbye)\b/.test(
+      value
+    )
+  )
+    return {
+      topic: "death, funeral or hospital themes",
+      source: "conservative_default",
+      matchedTerm: value.match(
+        /\b(death|dead|dying|funeral|burial|mourning|requiem|hospital|infirmary|surgery|hospice|losing you|goodbye)\b/
+      )?.[0],
+    }
+  return null
+}
+export function cautionText(caution: {
+  topic: string
+  sourceField: string
+  matchedTerm?: string
+  source?: string
+}) {
+  const source =
+    caution.source === "conservative_default"
+      ? `the conservative default flags ${caution.topic}`
+      : `your avoid list includes ${caution.topic}`
+  const field =
+    caution.sourceField === "selected work title"
+      ? "the selected work’s title mentions"
+      : `Qloo’s ${caution.sourceField} ${/themes|tags|keywords/.test(caution.sourceField) ? "mention" : "mentions"}`
+  return `Check before playing: ${field} “${caution.matchedTerm ?? caution.topic}”, and ${source}.`
+}
+export function avoidMatch(text: string, sensitivities: string[]) {
+  return Boolean(matchedAvoidTopic(text, sensitivities))
+}
+export function unsuitableReason(
+  entity: EchoesEntity,
+  sensitivities: string[]
+): AvoidMatch | null {
+  const p = entity.properties
+  const contentTags =
+    Array.isArray(p.tags) && entity.type === "urn:entity:artist"
+      ? p.tags.filter(
+          (tag) =>
+            !/influenced_by|influence:/.test(String(tag?.type ?? tag?.id ?? ""))
+        )
+      : p.tags
+  // Artist biographies and influences are not the themes of the selected work.
+  const fields: [string, string][] = [
+    ["title", entity.name],
+    [
+      "description",
+      `${entity.description ?? ""} ${String(p.description ?? "")} ${String(p.short_description ?? "")}`,
+    ],
+    [
+      "lyrical themes",
+      `${JSON.stringify(p.lyrical_themes ?? [])} ${String(p.lyrical_themes_description ?? "")}`,
+    ],
+    [
+      "keywords and tags",
+      `${JSON.stringify(p.keywords ?? [])} ${JSON.stringify(contentTags ?? [])} ${JSON.stringify(p.plot_themes ?? [])}`,
+    ],
+  ]
+  for (const [sourceField, text] of fields) {
+    if (entity.type === "urn:entity:artist" && sourceField === "description")
+      continue
+    const match = matchedAvoidTopic(
+      text,
+      sensitivities,
+      entity.type === "urn:entity:book"
+    )
+    if (match) return { ...match, sourceField }
+  }
+  return null
 }
 export function unsuitable(entity: EchoesEntity, sensitivities: string[]) {
-  const p = entity.properties
-  // Artist biographies and influences are not the themes of the selected work.
-  const text =
-    entity.type === "urn:entity:artist"
-      ? `${entity.name} ${JSON.stringify(p.lyrical_themes ?? [])} ${String(p.lyrical_themes_description ?? "")}`
-      : `${entity.name} ${entity.description ?? ""} ${JSON.stringify(Object.fromEntries(Object.entries(p).filter(([key]) => !/biography|external|image/.test(key))))}`
-  return avoidMatch(text, sensitivities)
+  return Boolean(unsuitableReason(entity, sensitivities))
 }
 const regions: [string, string, RegExp][] = [
   ["Ghana", "West Africa", /\b(ghana|ghanaian|gh|kumasi|accra)\b/i],
@@ -78,7 +164,7 @@ function origin(entity: EchoesEntity) {
     .map((v) => (typeof v === "string" ? v : JSON.stringify(v ?? "")))
     .join(" ")
 }
-function genres(entity: EchoesEntity) {
+export function entityGenres(entity: EchoesEntity) {
   const p = entity.properties
   const tags = Array.isArray(p.tags)
     ? (p.tags as { name?: string; type?: string; id?: string }[])
@@ -124,10 +210,10 @@ export function relevanceFor(
     )
   )
     signals.push("origin shared with producing seed")
-  const candidateGenres = genres(candidate)
+  const candidateGenres = entityGenres(candidate)
   if (
     seed?.type === candidate.type &&
-    [...genres(seed)].some((g) => candidateGenres.has(g))
+    [...entityGenres(seed)].some((g) => candidateGenres.has(g))
   )
     signals.push("genre shared with producing seed")
   const language = JSON.stringify([

@@ -1,6 +1,6 @@
 "use client"
 import type { Activity, ResidentInput, SessionKit } from "@/lib/echoes/types"
-import { sentences } from "@/lib/echoes/text"
+import { sentences, itemDateLabel } from "@/lib/echoes/text"
 import { mediaSearch } from "@/lib/echoes/media"
 import {
   rebalancePlan,
@@ -62,7 +62,11 @@ export default function SessionPlan({
         </p>
       </div>
       {kit.notes
-        .filter((note) => /^(No (film|TV|book)|Less personalised:)/.test(note))
+        .filter((note) =>
+          /^(No (film|TV|book)|Less personalised:|Few region-specific|.+ was left out)/.test(
+            note
+          )
+        )
         .map((note) => (
           <p className="coverage-note" key={note}>
             {note}
@@ -82,10 +86,14 @@ export default function SessionPlan({
             <div className="activity-card" key={check.entity.entityId}>
               <strong>{check.entity.name} · Named favourite</strong>
               <p>
-                {favorite?.eraLabel ??
-                  (favorite
-                    ? "Available to add to this running order"
-                    : `Original date unknown or unverified. ${check.reason}`)}
+                {check.blocked
+                  ? check.blocked.source === "conservative_default"
+                    ? `Held back by the conservative default for ${check.blocked.topic}.`
+                    : `Held back because it matches ${check.blocked.topic}.`
+                  : (favorite?.eraLabel ??
+                    (favorite
+                      ? "Available to add to this running order"
+                      : `Original date unknown or unverified. ${check.reason}`))}
               </p>
               <button
                 type="button"
@@ -138,12 +146,13 @@ export default function SessionPlan({
             kit.dateChecks?.find(
               (c) => c.favorite && c.entity.entityId === activity.itemId
             )
-          const replacements = pool.filter(
-            (i) =>
-              i.kind === item?.kind &&
-              i.entityId !== item?.entityId &&
-              !activities.some((a) => a.itemId === i.entityId)
-          )
+          const replacements = (item?.replacementIds ?? []).flatMap((id) => {
+            const candidate = pool.find((entry) => entry.entityId === id)
+            return candidate &&
+              !activities.some((a) => a.itemId === candidate.entityId)
+              ? [candidate]
+              : []
+          })
           return (
             <li className="activity-card" key={activity.id}>
               <div className="activity-heading">
@@ -176,16 +185,12 @@ export default function SessionPlan({
                     {item.namedFavorite ? "Named favourite · " : ""}
                     {item.yearEvidence.source}
                     {item.yearEvidence.cached ? " (cached)" : ""}{" "}
-                    {item.yearEvidence.firstAirYear &&
-                    item.yearEvidence.lastAirYear
-                      ? `${item.yearEvidence.firstAirYear}–${item.yearEvidence.lastAirYear}`
-                      : item.yearEvidence.year}
+                    {itemDateLabel(item, kit.era)}
                   </span>
                   <MediaLinks item={item} />
                   <details className="media-details">
                     <summary>Details</summary>
                     <p>{item.media?.[0]?.instructions}</p>
-                    <p>{item.whyItFits.join(" ")}</p>
                   </details>
                 </div>
               )}
@@ -223,7 +228,7 @@ export default function SessionPlan({
                     >
                       Remove
                     </button>
-                    {item && replacements.length > 0 && (
+                    {item && replacements.length >= 2 && (
                       <label>
                         Replace with
                         <select
@@ -274,7 +279,7 @@ export default function SessionPlan({
                           </option>
                           {replacements.map((i) => (
                             <option key={i.entityId} value={i.entityId}>
-                              {i.name} · {i.yearEvidence.year}
+                              {i.name} · {itemDateLabel(i, kit.era)}
                             </option>
                           ))}
                         </select>

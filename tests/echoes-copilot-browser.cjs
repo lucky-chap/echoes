@@ -133,7 +133,12 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
     assert.equal(resident.notes, notesText)
     assert.equal(resident.preferences.confirmed, true)
     assert(resident.responseHistory.some(h => h.item === "Test Artist" && h.response === "sparked"))
-    const items = ["Test Artist", "Test Film", "Alternate Artist"].map(
+    const items = [
+      "Test Artist",
+      "Test Film",
+      "Alternate Artist",
+      "Second Alternate Artist",
+    ].map(
       (name, i) => ({
         entityId: `fixture-${i}`,
         name,
@@ -150,6 +155,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
         },
       })
     )
+    items[0].replacementIds = [items[2].entityId, items[3].entityId]
     const activities = [
       {
         id: "welcome",
@@ -195,7 +201,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       residents: [resident],
       era: { from: 1958, to: 1970 },
       items: items.slice(0, 2),
-      alternatives: [items[2]],
+      alternatives: items.slice(2),
       activities,
       prompts: ["Would you like to listen or talk?"],
       aboutMe: {

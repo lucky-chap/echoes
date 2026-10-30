@@ -79,8 +79,13 @@ export function createMusicBrainzClient(
     const url = new URL(path, "https://musicbrainz.org")
     url.search = new URLSearchParams({ ...params, fmt: "json" }).toString()
     const key = `MusicBrainz:${url}`
+    const validCountResponse = (value: unknown) => {
+      if (path !== "/ws/2/release/" || !params["release-group"]) return true
+      const count = (value as Record<string, unknown> | null)?.["release-count"]
+      return typeof count === "number" && Number.isInteger(count) && count >= 0
+    }
     const cached = deps.cache === false ? undefined : readProviderCache<T>(key)
-    if (cached)
+    if (cached && validCountResponse(cached.value))
       return { data: cached.value, cached: true, fetchedAt: cached.fetchedAt }
     if (process.env.ECHOES_OFFLINE === "true")
       throw new MusicBrainzError(
@@ -119,7 +124,7 @@ export function createMusicBrainzClient(
         // Cache may have been filled by the request ahead of us in the queue.
         const filled =
           deps.cache === false ? undefined : readProviderCache<T>(key)
-        if (filled)
+        if (filled && validCountResponse(filled.value))
           return {
             data: filled.value,
             cached: true,
@@ -149,6 +154,8 @@ export function createMusicBrainzClient(
         if (!data || typeof data !== "object" || Array.isArray(data))
           throw new SyntaxError("Invalid MusicBrainz response")
         const body = data as Record<string, unknown>
+        if (!validCountResponse(data))
+          throw new SyntaxError("Missing or invalid official release count")
         if (
           (params.query &&
             path.includes("/artist/") &&

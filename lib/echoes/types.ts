@@ -106,6 +106,13 @@ export interface KitItem {
   eraLabel?: string
   prompt?: string
   score?: number
+  replacementIds?: string[]
+  cautions?: {
+    topic: string
+    sourceField: string
+    matchedTerm?: string
+    source?: "caregiver" | "conservative_default"
+  }[]
   entityId: string
   name: string
   kind: EchoesKind
@@ -124,6 +131,8 @@ export interface KitItem {
     workType?: "track" | "album" | "series"
     firstAirYear?: number
     lastAirYear?: number
+    ongoing?: boolean
+    artistLevel?: boolean
     releaseCount?: number
   }
   media?: {
@@ -151,6 +160,11 @@ export interface DateCheck {
   favorite: boolean
   checkedAt: string
   cached?: boolean
+  blocked?: {
+    topic: string
+    source: "caregiver" | "conservative_default" | "feedback"
+    sourceField?: string
+  }
 }
 export interface SessionKit {
   id: string

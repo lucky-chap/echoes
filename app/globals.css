@@ -946,7 +946,7 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 8px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
   padding: 4px 6px;
@@ -2311,6 +2311,9 @@ select {
   display: grid;
   gap: 14px;
   margin: 20px 0;
+}
+.media-options > .year-evidence {
+  justify-self: start;
 }
 .media-options small {
   display: block;

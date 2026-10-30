@@ -248,6 +248,19 @@ export class EchoesQlooClient {
     return rows
   }
 
+  /** Search resolves identity; Insights exposes the richer musical catalogue.
+   * Do not supply the artist as an interest: that excludes the artist itself. */
+  details(entity: EchoesEntity) {
+    return this.get(
+      "/v2/insights",
+      new URLSearchParams({
+        "filter.type": entity.type,
+        "filter.results.entities": entity.entityId,
+      }),
+      entity.type
+    )
+  }
+
   async tags(query: string, type?: string) {
     const cacheKey = `Qloo:exact-tags:v2:${type ?? "all"}:${normalizeName(query)}`
     const cached = readProviderCache<string[]>(cacheKey)
