@@ -1,5 +1,12 @@
 "use client"
-import type { Activity, ResidentInput, SessionKit } from "@/lib/echoes/types"
+import type {
+  Activity,
+  FeedbackRecord,
+  MemoryRecord,
+  ResidentInput,
+  SessionKit,
+} from "@/lib/echoes/types"
+import { changeSummary } from "@/lib/echoes/change-summary"
 import { sentences, itemDateLabel } from "@/lib/echoes/text"
 import { mediaSearch } from "@/lib/echoes/media"
 import {
@@ -13,13 +20,20 @@ import QlooArtwork from "./qloo-artwork"
 export default function SessionPlan({
   kit,
   resident,
+  feedback = [],
+  memories = [],
   onChange,
 }: {
   kit: SessionKit
   resident?: ResidentInput
+  feedback?: FeedbackRecord[]
+  memories?: MemoryRecord[]
   onChange: (kit: SessionKit) => void
 }) {
   const activities = kit.activities ?? []
+  const summary = resident
+    ? changeSummary(kit, resident, feedback, memories)
+    : null
   const pool = [
     ...new Map(
       [...kit.items, ...(kit.alternatives ?? [])].map((i) => [i.entityId, i])
@@ -61,6 +75,49 @@ export default function SessionPlan({
           finish early at any point.
         </p>
       </div>
+      {summary && (
+        <section
+          className="change-summary"
+          aria-labelledby="change-summary-title"
+        >
+          <p className="eyebrow">SINCE LAST TIME</p>
+          <h3 id="change-summary-title">What changed since last time</h3>
+          {summary.kept.length > 0 && (
+            <div className="change-summary-list">
+              <h4>Kept because it got a response</h4>
+              <ul>
+                {summary.kept.map((entry) => (
+                  <li key={`kept:${entry.entityId}`}>
+                    <strong>{entry.name}</strong> — {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.added.length > 0 && (
+            <div className="change-summary-list">
+              <h4>Added because of last time</h4>
+              <ul>
+                {summary.added.map((entry) => (
+                  <li key={`added:${entry.entityId}`}>{entry.reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.leftOut.length > 0 && (
+            <div className="change-summary-list">
+              <h4>Left out this time</h4>
+              <ul>
+                {summary.leftOut.map((entry) => (
+                  <li key={`left-out:${entry.name}`}>
+                    <strong>{entry.name}</strong> — {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
       {kit.notes
         .filter((note) =>
           /^(No (film|TV|book)|Less personalised:|Few region-specific|.+ was left out)/.test(

@@ -17,6 +17,9 @@ const program = ts.createProgram(
   [
     "lib/echoes/pipeline.ts",
     "lib/echoes/memory.ts",
+    "lib/echoes/change-summary.ts",
+    "lib/echoes/intake.ts",
+    "lib/echoes/session-history.ts",
     "lib/echoes/planner.ts",
     "lib/echoes/note.ts",
     "lib/echoes/secure-store.ts",
@@ -47,6 +50,14 @@ symlinkSync(resolve("node_modules"), join(output, "node_modules"), "dir")
 after(() => rmSync(output, { recursive: true, force: true }))
 const { generateSessionKit } = require(join(output, "pipeline.js"))
 const { relevantMemories, saveWrapUp } = require(join(output, "memory.js"))
+const { changeSummary } = require(join(output, "change-summary.js"))
+const { blankResident, intakeResidents } = require(join(output, "intake.js"))
+const {
+  recordNewSession,
+  residentSessionGroups,
+  residentSessions,
+  sessionNumber,
+} = require(join(output, "session-history.js"))
 const { planSession, rebalancePlan } = require(join(output, "planner.js"))
 const { createWorkspace, removeResidentData } = require(
   join(output, "workspace.js")
@@ -2446,4 +2457,251 @@ test("kit and live activity prompts do not add decorative quotation marks", () =
   const live = readFileSync("components/echoes/live-session.tsx", "utf8")
   assert(!plan.includes("“{activity.prompt}”"))
   assert(!/live-invitation[\s\S]{0,100}[“”]/.test(live))
+})
+
+test("change summary is absent on a first session with no stored feedback", async () => {
+  const tools = fixtureTools()
+  tools.client.search = async (query, type) =>
+    type === "urn:entity:artist" ? [entity("summary-anchor", query)] : []
+  tools.client.insights = async (input) =>
+    input.type === "urn:entity:artist"
+      ? [entity("summary-discovery", "Summary Discovery")]
+      : []
+  const resident = {
+    ...person,
+    id: "summary-first-session",
+    lovedThings: ["Summary Favourite"],
+  }
+  const kit = await generateSessionKit(
+    { residents: [resident], feedback: [] },
+    tools
+  )
+  assert(kit.items.length)
+  assert.equal(changeSummary(kit, resident, [], []), null)
+})
+
+test("change summary shows kept, added and left-out evidence from a saved wrap-up", async () => {
+  const tools = fixtureTools()
+  tools.client.search = async (query, type) =>
+    type === "urn:entity:artist" ? [entity("summary-elvis", query)] : []
+  tools.client.insights = async (input) =>
+    input.type === "urn:entity:artist"
+      ? [
+          entity("summary-discovered-a", "Discovered A"),
+          entity("summary-discovered-b", "Discovered B"),
+        ]
+      : []
+  const resident = {
+    ...person,
+    id: "summary-returning",
+    nickname: "Fictional",
+    lovedThings: ["Elvis Presley"],
+  }
+  const first = await generateSessionKit(
+    { residents: [resident], feedback: [] },
+    tools
+  )
+  const elvis = first.activities.find((a) => a.itemId === "summary-elvis")
+  const dropped = first.activities.find(
+    (a) => a.itemId === "summary-discovered-a"
+  )
+  assert(elvis)
+  assert(dropped)
+
+  let workspace = createWorkspace("summary-workspace", [resident])
+  workspace = saveWrapUp(
+    workspace,
+    first,
+    {
+      recordedAt: "2026-10-29T00:00:00.000Z",
+      observations: [
+        {
+          activityId: elvis.id,
+          entityId: "summary-elvis",
+          status: "engaged",
+        },
+        {
+          activityId: dropped.id,
+          entityId: "summary-discovered-a",
+          status: "not_for_us",
+        },
+      ],
+      engagement: 3,
+      caregiverNote: "",
+    },
+    ""
+  )
+  const saved = workspace.residents[0]
+  const next = await generateSessionKit(
+    {
+      residents: [saved],
+      feedback: workspace.feedback,
+      memories: relevantMemories(workspace.memories ?? [], saved.id),
+    },
+    tools
+  )
+  const summary = changeSummary(
+    next,
+    saved,
+    workspace.feedback,
+    workspace.memories
+  )
+  assert(summary)
+  assert(
+    summary.kept.some(
+      (entry) =>
+        entry.name === "Elvis Presley" &&
+        entry.reason === "marked engaging last time"
+    )
+  )
+  assert(
+    summary.added.some(
+      (entry) =>
+        entry.reason ===
+        "Because Fictional responded to Elvis Presley last time, we added Discovered B."
+    )
+  )
+  assert(
+    summary.leftOut.some(
+      (entry) =>
+        entry.name === "Discovered A" && entry.reason === "not for us last time"
+    )
+  )
+  assert(!summary.added.some((entry) => entry.name === "Discovered A"))
+})
+
+const historySession = (id, residentId, createdAt, reviewed = false) => ({
+  id,
+  createdAt,
+  kit: { id, residents: [{ id: residentId, nickname: residentId }] },
+  feedback: [],
+  engagement: null,
+  noteDraft: null,
+  ...(reviewed
+    ? {
+        wrapUp: {
+          recordedAt: createdAt,
+          observations: [],
+          engagement: 3,
+          caregiverNote: "",
+        },
+      }
+    : {}),
+})
+
+test("dashboard numbering follows each resident's creation order", () => {
+  const sessions = [
+    historySession("dorothy-3", "dorothy", "2026-03-01T00:00:00.000Z", true),
+    historySession("dorothy-1", "dorothy", "2026-01-01T00:00:00.000Z"),
+    historySession("margaret-1", "margaret", "2026-02-15T00:00:00.000Z"),
+    historySession("dorothy-2", "dorothy", "2026-02-01T00:00:00.000Z", true),
+  ]
+  assert.deepEqual(
+    residentSessions(sessions, "dorothy").map((entry) => [
+      entry.number,
+      entry.session.id,
+      entry.session.wrapUp ? "reviewed" : "ready to continue",
+    ]),
+    [
+      [3, "dorothy-3", "reviewed"],
+      [2, "dorothy-2", "reviewed"],
+      [1, "dorothy-1", "ready to continue"],
+    ]
+  )
+  assert.deepEqual(
+    residentSessions(sessions, "margaret").map((entry) => entry.number),
+    [1]
+  )
+  assert.equal(sessionNumber(sessions, "dorothy-1"), 1)
+  assert.equal(sessionNumber(sessions, "dorothy-2"), 2)
+  assert.equal(sessionNumber(sessions, "dorothy-3"), 3)
+  assert.equal(sessionNumber(sessions, "margaret-1"), 1)
+  assert.deepEqual(
+    residentSessionGroups(
+      [{ id: "dorothy" }, { id: "margaret" }],
+      sessions
+    ).map((group) => [group.resident.id, group.sessions.length]),
+    [
+      ["dorothy", 3],
+      ["margaret", 1],
+    ]
+  )
+})
+
+test("planning a next session keeps every earlier kit", () => {
+  const first = historySession(
+    "first-session",
+    "dorothy",
+    "2026-01-01T00:00:00.000Z"
+  )
+  const second = historySession(
+    "second-session",
+    "dorothy",
+    "2026-02-01T00:00:00.000Z"
+  )
+  let sessions = recordNewSession([], first)
+  sessions = recordNewSession(sessions, second)
+  assert.equal(sessions.length, 2)
+  assert.equal(sessions[0].id, "second-session")
+  assert(sessions.some((session) => session.id === "first-session"))
+  assert.deepEqual(
+    residentSessions(sessions, "dorothy").map((entry) => entry.number),
+    [2, 1]
+  )
+  const app = readFileSync("components/echoes/echoes-app.tsx", "utf8")
+  assert.match(app, /sessions: recordNewSession\(current\.sessions, session\)/)
+})
+
+test("the add-person form never reuses an existing resident's details", () => {
+  const existing = [
+    {
+      ...person,
+      id: "dorothy",
+      nickname: "Dorothy",
+      birthYear: 1944,
+      hometown: "Memphis",
+      country: "United States",
+      lovedThings: ["Elvis Presley"],
+      sensitivities: ["war"],
+      notes: "Saved caregiver note.",
+      preferences: {
+        liked_traits: ["choir singing"],
+        disliked_traits: [],
+        format_prefs: [],
+        logistics: [],
+        people: [],
+        places: [],
+        confirmed: true,
+        sourceNotes: "Saved caregiver note.",
+      },
+      responseHistory: [
+        {
+          item: "Elvis Presley",
+          domain: "music",
+          traits: [],
+          response: "sparked",
+          note: "",
+          session: "past",
+        },
+      ],
+    },
+  ]
+  const draft = blankResident("new-person")
+  const addForm = intakeResidents(existing, "dorothy", "add", draft)
+  assert.equal(addForm.length, 1)
+  assert.equal(addForm[0].id, "new-person")
+  assert.equal(addForm[0].nickname, "")
+  assert.equal(addForm[0].hometown, "")
+  assert.equal(addForm[0].country, "")
+  assert.deepEqual(addForm[0].lovedThings, [""])
+  assert.equal(addForm[0].notes, undefined)
+  assert.equal(addForm[0].preferences, undefined)
+  assert.equal(addForm[0].responseHistory, undefined)
+  assert.deepEqual(intakeResidents(existing, "dorothy", "add"), [])
+
+  const planForm = intakeResidents(existing, "dorothy", "plan")
+  assert.equal(planForm.length, 1)
+  assert.equal(planForm[0].id, "dorothy")
+  assert.equal(planForm[0].nickname, "Dorothy")
+  assert.deepEqual(planForm[0].lovedThings, ["Elvis Presley"])
 })

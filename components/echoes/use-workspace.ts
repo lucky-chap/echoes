@@ -1,20 +1,12 @@
 "use client"
 import { browserWorkspaceStorage } from "@/lib/echoes/browser-storage"
+import { blankResident } from "@/lib/echoes/intake"
 import { migrateResidentNotes } from "@/lib/echoes/preferences"
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { EchoesWorkspace, ResidentInput } from "@/lib/echoes/types"
+import type { EchoesWorkspace } from "@/lib/echoes/types"
 import { createWorkspace, removeResidentData } from "@/lib/echoes/workspace"
 
-export const blankResident = (id = crypto.randomUUID()): ResidentInput => ({
-  id,
-  nickname: "",
-  birthYear: 1948,
-  hometown: "",
-  country: "",
-  language: "English",
-  lovedThings: [""],
-  sensitivities: [],
-})
+export { blankResident }
 const empty = () => createWorkspace("loading", [blankResident("initial")])
 async function readLocal() {
   const secret = window.location.hash.match(/^#workspace=([\w-]+)$/)?.[1]

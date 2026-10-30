@@ -9,6 +9,13 @@ import {
 } from "@/lib/echoes/preferences"
 import { demoProfiles } from "@/lib/echoes/demos"
 import { mergeFeedback } from "@/lib/echoes/feedback"
+import { intakeResidents, type IntakeMode } from "@/lib/echoes/intake"
+import {
+  latestSessionFor,
+  recordNewSession,
+  residentSessionGroups,
+  sessionNumber,
+} from "@/lib/echoes/session-history"
 import type {
   FeedbackRecord,
   ResidentInput,
@@ -84,11 +91,20 @@ export default function EchoesApp() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [activeResidentId, setActiveResidentId] = useState("")
   const [residentSearch, setResidentSearch] = useState("")
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>("plan")
+  const [draftResident, setDraftResident] = useState<ResidentInput | null>(null)
   const requestController = useRef<AbortController | null>(null)
   const residents = [
     workspace.residents.find((r) => r.id === activeResidentId) ??
       workspace.residents[0],
   ].filter(Boolean)
+  const intakePeople = intakeResidents(
+    workspace.residents,
+    activeResidentId,
+    intakeMode,
+    draftResident
+  )
+  const intakePerson = intakePeople[0]
   const feedback = workspace.feedback
   const kitResident = kit
     ? workspace.residents.find(
@@ -98,6 +114,16 @@ export default function EchoesApp() {
   const kitPreferences = kitResident
     ? confirmedPreferences(kitResident)
     : undefined
+  const kitSessionNumber = kit
+    ? sessionNumber(workspace.sessions, kit.id) || 1
+    : 1
+  const namedResidents = workspace.residents.filter((resident) =>
+    resident.nickname.trim()
+  )
+  const sessionGroups = residentSessionGroups(
+    namedResidents,
+    workspace.sessions
+  )
 
   useEffect(() => {
     if (locked) {
@@ -160,7 +186,11 @@ export default function EchoesApp() {
       ...current,
       residents: typeof next === "function" ? next(current.residents) : next,
     }))
-  const update = (index: number, patch: Partial<ResidentInput>) =>
+  const update = (index: number, patch: Partial<ResidentInput>) => {
+    if (intakeMode === "add") {
+      setDraftResident((current) => (current ? { ...current, ...patch } : current))
+      return
+    }
     setResidents((current) =>
       current.map((resident) =>
         resident.id === residents[index]?.id
@@ -168,7 +198,29 @@ export default function EchoesApp() {
           : resident
       )
     )
+  }
   const loadDemo = (all = false) => {
+    if (!all) {
+      const example = demoProfiles[0]
+      const existing = workspace.residents.find(
+        (resident) =>
+          resident.nickname.trim().toLowerCase() ===
+          example.nickname.trim().toLowerCase()
+      )
+      if (existing) {
+        setActiveResidentId(existing.id)
+        setIntakeMode("plan")
+        setDraftResident(null)
+        const latest = latestSessionFor(workspace.sessions, existing.id)
+        if (latest) {
+          setKit(latest.kit)
+          navigate("kit", latest.id)
+          return
+        }
+        navigate("intake")
+        return
+      }
+    }
     const examples = (all ? demoProfiles : demoProfiles.slice(0, 1)).map(
       (resident) => ({
         ...resident,
@@ -183,7 +235,39 @@ export default function EchoesApp() {
       [...current.filter((r) => r.nickname), ...examples].slice(0, 60)
     )
     setActiveResidentId(examples[0].id)
+    setIntakeMode("plan")
+    setDraftResident(null)
     navigate("intake")
+  }
+  const planNextSession = (resident: ResidentInput) => {
+    setActiveResidentId(resident.id)
+    setIntakeMode("plan")
+    setDraftResident(null)
+    navigate("intake")
+  }
+  const editResidentProfile = (resident: ResidentInput) => {
+    setActiveResidentId(resident.id)
+    setIntakeMode("profile")
+    setDraftResident(null)
+    navigate("intake")
+  }
+  const addNewPerson = () => {
+    if (workspace.residents.length >= 60) return
+    setDraftResident(blankResident())
+    setIntakeMode("add")
+    setResidentSearch("")
+    navigate("intake")
+  }
+  const saveNewPerson = () => {
+    if (!draftResident) return
+    setWorkspace((current) => ({
+      ...current,
+      residents: [...current.residents, draftResident].slice(0, 60),
+    }))
+    setActiveResidentId(draftResident.id)
+    setDraftResident(null)
+    setIntakeMode("plan")
+    navigate("dashboard")
   }
   const createKit = async (chosenResidents = residents) => {
     requestController.current = new AbortController()
@@ -218,6 +302,20 @@ export default function EchoesApp() {
       if (!response.ok)
         throw Error(payload.error || "Could not prepare a session kit.")
       setKit(payload.kit)
+      const session = {
+        id: payload.kit.id,
+        createdAt: payload.kit.createdAt,
+        kit: payload.kit,
+        feedback: [],
+        engagement: null,
+        noteDraft: null,
+        progress: payload.kit.activities?.[0]
+          ? {
+              activityId: payload.kit.activities[0].id,
+              updatedAt: payload.kit.createdAt,
+            }
+          : undefined,
+      }
       setWorkspace((current) => ({
         ...current,
         memories: [
@@ -235,23 +333,7 @@ export default function EchoesApp() {
           })),
         ],
         traces: [...payload.kit.agentTrace, ...current.traces].slice(0, 200),
-        sessions: [
-          {
-            id: payload.kit.id,
-            createdAt: payload.kit.createdAt,
-            kit: payload.kit,
-            feedback: [],
-            engagement: null,
-            noteDraft: null,
-            progress: payload.kit.activities?.[0]
-              ? {
-                  activityId: payload.kit.activities[0].id,
-                  updatedAt: payload.kit.createdAt,
-                }
-              : undefined,
-          },
-          ...current.sessions,
-        ].slice(0, 600),
+        sessions: recordNewSession(current.sessions, session),
       }))
       navigate("kit", payload.kit.id)
     } catch (reason) {
@@ -359,8 +441,8 @@ export default function EchoesApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          note: migrateResidentNotes(residents[0]).notes,
-          authority: Boolean(residents[0]?.consent),
+          note: migrateResidentNotes(intakePerson!).notes,
+          authority: Boolean(intakePerson?.consent),
         }),
       })
       const payload = await response.json()
@@ -666,16 +748,13 @@ export default function EchoesApp() {
                   course.
                 </p>
               </div>
-              <Link
+              <button
                 className="primary dashboard-create"
-                href="/intake"
-                onNavigate={(event) => {
-                  event.preventDefault()
-                  navigate("intake")
-                }}
+                onClick={addNewPerson}
+                disabled={workspace.residents.length >= 60}
               >
-                Create a new kit <ArrowRight size={17} />
-              </Link>
+                Add a new person <ArrowRight size={17} />
+              </button>
             </div>
             {lastUnfinishedSession && (
               <section
@@ -710,37 +789,69 @@ export default function EchoesApp() {
             <section className="dashboard-kits" aria-labelledby="kits-title">
               <div className="panel-title">
                 <div>
-                  <p className="eyebrow">MY KITS</p>
-                  <h2 id="kits-title">Recent session plans</h2>
+                  <p className="eyebrow">YOUR RESIDENTS</p>
+                  <h2 id="kits-title">People and their sessions</h2>
                 </div>
                 <span>{workspace.sessions.length} saved</span>
               </div>
-              {workspace.sessions.length ? (
-                <div className="kit-history">
-                  {workspace.sessions.slice(0, 6).map((session) => (
-                    <article key={session.id}>
-                      <div>
-                        <h3>
-                          {session.kit.residents
-                            .map((resident) => resident.nickname)
-                            .join(" & ")}
-                        </h3>
-                        <p>
-                          {new Date(session.createdAt).toLocaleDateString(
-                            undefined,
-                            { month: "short", day: "numeric" }
-                          )}
-                          {session.wrapUp
-                            ? " · wrapped up"
-                            : " · ready to continue"}
-                        </p>
+              {sessionGroups.length ? (
+                <div className="resident-groups">
+                  {sessionGroups.map(({ resident, sessions }) => (
+                    <article className="resident-group" key={resident.id}>
+                      <div className="resident-group-heading">
+                        <div>
+                          <h3>{resident.nickname}</h3>
+                          <p>
+                            {sessions.length
+                              ? `${sessions.length} session${sessions.length === 1 ? "" : "s"}`
+                              : "No sessions yet"}
+                          </p>
+                        </div>
+                        <div className="resident-actions">
+                          <button
+                            className="primary"
+                            onClick={() => planNextSession(resident)}
+                          >
+                            Plan next session <ArrowRight size={15} />
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={() => editResidentProfile(resident)}
+                          >
+                            Edit profile
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        className="secondary"
-                        onClick={() => openKit(session)}
-                      >
-                        View kit <ArrowRight size={15} />
-                      </button>
+                      {sessions.length > 0 && (
+                        <ol className="resident-sessions">
+                          {sessions.map(({ session, number }) => (
+                            <li key={session.id}>
+                              <button
+                                className="resident-session"
+                                onClick={() => openKit(session)}
+                              >
+                                <span className="resident-session-title">
+                                  Session {number}
+                                </span>
+                                <span className="resident-session-date">
+                                  {new Date(
+                                    session.createdAt
+                                  ).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                                <span className="resident-session-status">
+                                  {session.wrapUp
+                                    ? "reviewed"
+                                    : "ready to continue"}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -751,11 +862,8 @@ export default function EchoesApp() {
                     Add a person, a birth year, and a favourite to create a
                     calm, reviewable plan.
                   </p>
-                  <button
-                    className="secondary"
-                    onClick={() => navigate("intake")}
-                  >
-                    Create your first kit <ArrowRight size={16} />
+                  <button className="secondary" onClick={addNewPerson}>
+                    Add a new person <ArrowRight size={16} />
                   </button>
                 </div>
               )}
@@ -764,78 +872,97 @@ export default function EchoesApp() {
         )}
         {screen === "intake" && (
           <>
-            <section
-              className="resident-roster"
-              aria-label="Resident directory"
-            >
-              <div>
-                <h2>Your residents</h2>
-                <p>
-                  Choose one person to prepare their next session.{" "}
-                  {workspace.residents.length}/60 profiles.
-                </p>
-              </div>
-              <label>
-                Find a resident
-                <input
-                  type="search"
-                  value={residentSearch}
-                  onChange={(e) => setResidentSearch(e.target.value)}
-                  placeholder="Search by nickname"
-                />
-              </label>
-              <div className="roster-options">
-                {workspace.residents
-                  .filter((r) =>
-                    r.nickname
-                      .toLowerCase()
-                      .includes(residentSearch.toLowerCase())
-                  )
-                  .map((r) => (
-                    <button
-                      key={r.id}
-                      aria-pressed={residents[0]?.id === r.id}
-                      onClick={() => {
-                        setActiveResidentId(r.id)
-                        setKit(null)
-                      }}
-                    >
-                      {r.nickname || "New resident"}
-                    </button>
-                  ))}
-                <button
-                  disabled={workspace.residents.length >= 60}
-                  onClick={() => {
-                    const next = blankResident()
-                    setResidents((current) => [...current, next])
-                    setActiveResidentId(next.id)
-                    setResidentSearch("")
-                  }}
-                >
-                  + Add resident
-                </button>
-              </div>
-            </section>
+            {intakeMode !== "add" && (
+              <section
+                className="resident-roster"
+                aria-label="Resident directory"
+              >
+                <div>
+                  <h2>Your residents</h2>
+                  <p>
+                    Choose one person to prepare their next session.{" "}
+                    {workspace.residents.length}/60 profiles.
+                  </p>
+                </div>
+                <label>
+                  Find a resident
+                  <input
+                    type="search"
+                    value={residentSearch}
+                    onChange={(e) => setResidentSearch(e.target.value)}
+                    placeholder="Search by nickname"
+                  />
+                </label>
+                <div className="roster-options">
+                  {workspace.residents
+                    .filter((r) =>
+                      r.nickname
+                        .toLowerCase()
+                        .includes(residentSearch.toLowerCase())
+                    )
+                    .map((r) => (
+                      <button
+                        key={r.id}
+                        aria-pressed={residents[0]?.id === r.id}
+                        onClick={() => {
+                          setActiveResidentId(r.id)
+                          setDraftResident(null)
+                          setKit(null)
+                        }}
+                      >
+                        {r.nickname || "New resident"}
+                      </button>
+                    ))}
+                  <button
+                    disabled={workspace.residents.length >= 60}
+                    onClick={addNewPerson}
+                  >
+                    + Add a new person
+                  </button>
+                </div>
+              </section>
+            )}
             <div className="workspace-layout">
               <section className="intake card" aria-labelledby="intake-title">
                 <div className="section-title">
-                  <p className="eyebrow">YOUR NEXT LITTLE MOMENT</p>
+                  <p className="eyebrow">
+                    {intakeMode === "add"
+                      ? "ADD A NEW PERSON"
+                      : intakeMode === "profile"
+                        ? "EDIT PROFILE"
+                        : "PLAN NEXT SESSION"}
+                  </p>
                   <span className="step-label">
                     01 <span>/ 03</span>
                   </span>
                 </div>
-                <h1 id="intake-title">Who’s on your mind?</h1>
+                <h1 id="intake-title">
+                  {intakeMode === "add"
+                    ? "Add a new person"
+                    : intakePerson?.nickname || "This person"}
+                </h1>
                 <p className="section-description">
-                  A few familiar details help us find a thoughtful starting
-                  point.
+                  {intakeMode === "add"
+                    ? "Enter their details from scratch. Nothing is copied from another resident."
+                    : intakeMode === "profile"
+                      ? `These are ${intakePerson?.nickname || "the resident"}'s saved details. Changes here update the profile only.`
+                      : `These are ${intakePerson?.nickname || "the resident"}'s saved details. Planning saves a new session and keeps earlier sessions.`}
                 </p>
                 <form
                   onSubmit={(event) => {
                     event.preventDefault()
-                    void createKit()
+                    if (intakeMode === "add") {
+                      saveNewPerson()
+                      return
+                    }
+                    if (intakeMode === "profile") {
+                      navigate("dashboard")
+                      return
+                    }
+                    void createKit(intakePeople)
                   }}
                 >
-                  {residents.map((resident, index) => (
+                  {intakePeople.map((resident, index) => (
                     <fieldset className="resident-form" key={resident.id}>
                       <legend>
                         <span className="person-number">
@@ -843,7 +970,7 @@ export default function EchoesApp() {
                         </span>
                         {resident.nickname || "Someone special"}
                       </legend>
-                      {residents.length > 1 && (
+                      {intakePeople.length > 1 && (
                         <button
                           className="remove"
                           type="button"
@@ -1019,9 +1146,17 @@ export default function EchoesApp() {
                           <LoaderCircle size={17} className="spin" /> Finding
                           familiar things…
                         </>
+                      ) : intakeMode === "add" ? (
+                        <>
+                          Add this person <ArrowRight size={17} />
+                        </>
+                      ) : intakeMode === "profile" ? (
+                        <>
+                          Save profile <ArrowRight size={17} />
+                        </>
                       ) : (
                         <>
-                          Create a session kit <ArrowRight size={17} />
+                          Plan next session <ArrowRight size={17} />
                         </>
                       )}
                     </button>
@@ -1029,13 +1164,15 @@ export default function EchoesApp() {
                 </form>
               </section>
               <aside className="intake-aside">
-                <FamilyPanel
-                  key={residents[0]?.id}
-                  residentId={residents[0]?.id}
-                  enabled={mode === "protected"}
-                  saved={saveState === "Saved to protected workspace"}
-                  onAccepted={reload}
-                />
+                {intakeMode !== "add" && intakePerson && (
+                  <FamilyPanel
+                    key={intakePerson.id}
+                    residentId={intakePerson.id}
+                    enabled={mode === "protected"}
+                    saved={saveState === "Saved to protected workspace"}
+                    onAccepted={reload}
+                  />
+                )}
                 <div className="little-note">
                   <span className="handwritten">
                     No need to know everything.
@@ -1065,24 +1202,28 @@ export default function EchoesApp() {
                     </li>
                   </ul>
                 </section>
-                <section className="demo-panel">
-                  <p>Just exploring?</p>
-                  <button className="text-button" onClick={() => loadDemo()}>
-                    Try one demo person <ArrowRight size={15} />
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => loadDemo(true)}
-                  >
-                    Add three fictional profiles <Users size={15} />
-                  </button>
-                </section>
-                {workspace.sessions.length > 0 && (
+                {intakeMode !== "add" && (
+                  <section className="demo-panel">
+                    <p>Just exploring?</p>
+                    <button className="text-button" onClick={() => loadDemo()}>
+                      Try one demo person <ArrowRight size={15} />
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => loadDemo(true)}
+                    >
+                      Add three fictional profiles <Users size={15} />
+                    </button>
+                  </section>
+                )}
+                {intakeMode !== "add" && workspace.sessions.length > 0 && (
                   <section className="recent-sessions">
                     <p className="eyebrow">YOUR RECENT KITS</p>
                     {workspace.sessions
                       .filter((s) =>
-                        s.kit.residents.some((r) => r.id === residents[0]?.id)
+                        s.kit.residents.some(
+                          (r) => r.id === intakePerson?.id
+                        )
                       )
                       .slice(0, 5)
                       .map((session) => (
@@ -1110,26 +1251,28 @@ export default function EchoesApp() {
                       ))}
                   </section>
                 )}
-                <details className="memory-panel">
-                  <summary>What Echoes knows about this person</summary>
-                  {(workspace.memories ?? [])
-                    .filter((m) => m.residentId === residents[0]?.id)
-                    .slice(-15)
-                    .reverse()
-                    .map((m) => (
-                      <article key={m.id}>
-                        <small>
-                          {m.createdAt.slice(0, 10)} · {m.source} · {m.status}{" "}
-                          {m.kind}
-                        </small>
-                        <p>{m.text}</p>
-                      </article>
-                    ))}
-                  <p>
-                    Qloo discoveries are suggestions. A reported story is not
-                    automatically a confirmed biographical fact.
-                  </p>
-                </details>
+                {intakeMode !== "add" && (
+                  <details className="memory-panel">
+                    <summary>What Echoes knows about this person</summary>
+                    {(workspace.memories ?? [])
+                      .filter((m) => m.residentId === intakePerson?.id)
+                      .slice(-15)
+                      .reverse()
+                      .map((m) => (
+                        <article key={m.id}>
+                          <small>
+                            {m.createdAt.slice(0, 10)} · {m.source} · {m.status}{" "}
+                            {m.kind}
+                          </small>
+                          <p>{m.text}</p>
+                        </article>
+                      ))}
+                    <p>
+                      Qloo discoveries are suggestions. A reported story is not
+                      automatically a confirmed biographical fact.
+                    </p>
+                  </details>
+                )}
               </aside>
             </div>
           </>
@@ -1188,18 +1331,12 @@ export default function EchoesApp() {
               <div>
                 <p className="eyebrow">A MOMENT, MADE FOR THEM</p>
                 <h1>
-                  A familiar thread
-                  <br />
-                  <em>
-                    for{" "}
-                    {kit.residents
-                      .map((resident) => resident.nickname)
-                      .join(" & ")}
-                    .
-                  </em>
+                  {`${kit.residents
+                    .map((resident) => resident.nickname)
+                    .join(" & ")}: Session ${kitSessionNumber}`}
                 </h1>
                 <p className="kit-meta">
-                  <Clock3 size={15} /> 30 minutes <span>·</span> {kit.era.from}–
+                  A familiar thread · 30 minutes <span>·</span> {kit.era.from}–
                   {kit.era.to} <span>·</span> {kit.items.length} touchstones
                 </p>
               </div>
@@ -1287,6 +1424,14 @@ export default function EchoesApp() {
                         kit={kit}
                         resident={workspace.residents.find(
                           (r) => r.id === kit.residents[0]?.id
+                        )}
+                        feedback={feedback.filter(
+                          (record) =>
+                            record.residentId === kit.residents[0]?.id
+                        )}
+                        memories={(workspace.memories ?? []).filter(
+                          (record) =>
+                            record.residentId === kit.residents[0]?.id
                         )}
                         onChange={(next) => {
                           setKit(next)
