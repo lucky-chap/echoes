@@ -126,7 +126,7 @@ export default function SessionPlan({
           )}
         </section>
       )}
-      {kit.notes
+      {/* {kit.notes
         .filter((note) =>
           /^(No (film|TV|book)|Less personalised:|Few region-specific|.+ was left out)/.test(
             note
@@ -136,7 +136,7 @@ export default function SessionPlan({
           <p className="coverage-note" key={note}>
             {note}
           </p>
-        ))}
+        ))} */}
       {(kit.dateChecks ?? [])
         .filter(
           (check) =>

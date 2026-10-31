@@ -70,7 +70,7 @@ export default function KitChecks({
           favourite for broader results.
         </p>
       )}
-      {status.pending.length > 0 && (
+      {/* {status.pending.length > 0 && (
         <section
           className="pending-checks"
           aria-labelledby="pending-checks-title"
@@ -122,7 +122,7 @@ export default function KitChecks({
             {status.pending.length} still awaiting a result.
           </p>
         </section>
-      )}
+      )} */}
       {error && (
         <p role="alert" className="error">
           {error}
