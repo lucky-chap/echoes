@@ -226,7 +226,7 @@ export default function SessionPlan({
                   {from}–{minute} min
                 </span>
                 <h3>{activity.title}</h3>
-                {source && (
+                {/* {source && (
                   <span
                     className={`source-chip source-${source}`}
                     title={
@@ -237,7 +237,7 @@ export default function SessionPlan({
                   >
                     {source === "named" ? "You named this" : "From Qloo"}
                   </span>
-                )}
+                )} */}
               </div>
               <p className="activity-prompt">{activity.prompt}</p>
               <p>{activity.rationale}</p>

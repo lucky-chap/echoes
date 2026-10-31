@@ -17,6 +17,7 @@ if (coldA)
 let networkCalls = 0
 process.env.DEMO_MODE = offline ? "true" : "false"
 process.env.ECHOES_WARM_DEMO = "true"
+process.env.ECHOES_TOOL_BUDGET = process.env.ECHOES_TOOL_BUDGET || "240"
 if (offline) {
   process.env.ECHOES_OFFLINE = "true"
   global.fetch = async () => {

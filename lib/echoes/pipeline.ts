@@ -84,9 +84,10 @@ export interface OrchestratorTools {
 export { unsuitable } from "./suitability"
 
 /** One policy-driven tool orchestrator; no pretend autonomous agents or invented tool results.
- * At most 64 tool invocations, 16 independent date checks plus two music swap
- * checks, one discovery replan, and a 60s deadline.
- * Individual providers have their own shorter timeouts. Tests inject explicit fixtures.
+ * At most 64 tool invocations by default (ECHOES_TOOL_BUDGET), 24 independent date checks
+ * plus two music swap checks, one discovery replan, and a 60s deadline. Warm demo runs get a
+ * wider tool budget via ECHOES_WARM_DEMO. Individual providers have their own shorter timeouts.
+ * Tests inject explicit fixtures.
  */
 export async function generateSessionKit(
   input: {
@@ -128,6 +129,10 @@ export async function generateSessionKit(
   }
   const agentTrace: AgentTrace[] = []
   let calls = 0
+  const toolBudget = Number(
+    process.env.ECHOES_TOOL_BUDGET ??
+      (process.env.ECHOES_WARM_DEMO === "true" ? 240 : 64)
+  )
   const trace = (
     role: AgentTrace["role"],
     tool: AgentTrace["tool"],
@@ -152,7 +157,7 @@ export async function generateSessionKit(
     run: () => Promise<T>,
     describe: (value: T) => Record<string, unknown>
   ): Promise<T | null> => {
-    if (calls >= 64 || signal.aborted) {
+    if (calls >= toolBudget || signal.aborted) {
       trace(
         role,
         tool,
@@ -511,6 +516,7 @@ export async function generateSessionKit(
   const research: NonNullable<SessionKit["research"]> = []
   let unavailable = 0
   let datedCount = 0
+  const dateCheckBudget = Number(process.env.ECHOES_DATE_CHECK_BUDGET ?? 40)
   const verifyPool = async () => {
     // Use provider dates to order the limited independent checks, never to approve a work.
     const startsAfterWindow = (candidate: EchoesEntity) =>
@@ -546,7 +552,7 @@ export async function generateSessionKit(
       queue.sort((a, b) => anchors.indexOf(a) - anchors.indexOf(b))
     for (const candidate of queue) {
       // Reserve two additional music checks for swaps after the mixed-domain pass.
-      const dateLimit = candidate.type === "urn:entity:artist" ? 18 : 16
+      const dateLimit = candidate.type === "urn:entity:artist" ? dateCheckBudget + 2 : dateCheckBudget
       if (datedCount >= dateLimit || checked.has(candidate.entityId)) {
         trace(
           "Session Planner",
@@ -980,7 +986,7 @@ export async function generateSessionKit(
     verified.filter((i) => !i.namedFavorite).length < 2 &&
     seeds.length &&
     !signal.aborted &&
-    datedCount < 16
+    datedCount < dateCheckBudget
   ) {
     trace(
       "Session Planner",
