@@ -197,6 +197,11 @@ export interface SessionKit {
     unavailable: number
     toolCalls: number
   }
+  /** Set when the caregiver chose to plan without reviewing the prior session. */
+  plannedWithoutReview?: {
+    sessionId: string
+    sessionNumber: number
+  }
 }
 
 export interface SessionRecord {

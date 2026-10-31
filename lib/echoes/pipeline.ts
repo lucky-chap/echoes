@@ -1,7 +1,5 @@
 import {
-  unsuitable,
   unsuitableReason,
-  avoidMatch,
   matchedAvoidTopic,
   relevanceFor,
   cautionText,

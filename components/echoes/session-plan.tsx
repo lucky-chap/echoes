@@ -7,6 +7,8 @@ import type {
   SessionKit,
 } from "@/lib/echoes/types"
 import { changeSummary } from "@/lib/echoes/change-summary"
+import { planItemSource } from "@/lib/echoes/qloo-summary"
+import { planReviewNotice } from "@/lib/echoes/session-history"
 import { sentences, itemDateLabel } from "@/lib/echoes/text"
 import { mediaSearch } from "@/lib/echoes/media"
 import {
@@ -34,6 +36,7 @@ export default function SessionPlan({
   const summary = resident
     ? changeSummary(kit, resident, feedback, memories)
     : null
+  const reviewNotice = planReviewNotice(kit)
   const pool = [
     ...new Map(
       [...kit.items, ...(kit.alternatives ?? [])].map((i) => [i.entityId, i])
@@ -75,6 +78,11 @@ export default function SessionPlan({
           finish early at any point.
         </p>
       </div>
+      {reviewNotice && (
+        <p className="coverage-note review-bypass-note" role="status">
+          {reviewNotice}
+        </p>
+      )}
       {summary && (
         <section
           className="change-summary"
@@ -203,6 +211,7 @@ export default function SessionPlan({
             kit.dateChecks?.find(
               (c) => c.favorite && c.entity.entityId === activity.itemId
             )
+          const source = planItemSource(item, Boolean(manual))
           const replacements = (item?.replacementIds ?? []).flatMap((id) => {
             const candidate = pool.find((entry) => entry.entityId === id)
             return candidate &&
@@ -217,6 +226,18 @@ export default function SessionPlan({
                   {from}–{minute} min
                 </span>
                 <h3>{activity.title}</h3>
+                {source && (
+                  <span
+                    className={`source-chip source-${source}`}
+                    title={
+                      source === "named"
+                        ? "This came from the caregiver's saved profile."
+                        : "Qloo suggested this; familiarity is unconfirmed."
+                    }
+                  >
+                    {source === "named" ? "You named this" : "From Qloo"}
+                  </span>
+                )}
               </div>
               <p className="activity-prompt">{activity.prompt}</p>
               <p>{activity.rationale}</p>

@@ -18,6 +18,7 @@ const program = ts.createProgram(
     "lib/echoes/pipeline.ts",
     "lib/echoes/memory.ts",
     "lib/echoes/change-summary.ts",
+    "lib/echoes/qloo-summary.ts",
     "lib/echoes/intake.ts",
     "lib/echoes/session-history.ts",
     "lib/echoes/planner.ts",
@@ -51,8 +52,12 @@ after(() => rmSync(output, { recursive: true, force: true }))
 const { generateSessionKit } = require(join(output, "pipeline.js"))
 const { relevantMemories, saveWrapUp } = require(join(output, "memory.js"))
 const { changeSummary } = require(join(output, "change-summary.js"))
+const { planItemSource, qlooAdded } = require(join(output, "qloo-summary.js"))
 const { blankResident, intakeResidents } = require(join(output, "intake.js"))
 const {
+  latestUnreviewedSession,
+  markPlannedWithoutReview,
+  planReviewNotice,
   recordNewSession,
   residentSessionGroups,
   residentSessions,
@@ -1839,7 +1844,7 @@ test("Twi invitations show an English line and confirmed logistics remain on rev
 
 test("books are conversation activities without playback links and templates do not repeat", async () => {
   const { primaryMedia } = require(join(output, "media.js"))
-  const books = ["One", "Two"].map((name, index) => ({
+  const books = ["One", "Two"].map((name) => ({
     ...entity(name, name, "urn:entity:book"),
     kind: "book",
     yearEvidence: {
@@ -2570,6 +2575,182 @@ test("change summary shows kept, added and left-out evidence from a saved wrap-u
   assert(!summary.added.some((entry) => entry.name === "Discovered A"))
 })
 
+test("the Qloo panel counts only existing trace data", () => {
+  const trace = [
+    {
+      id: "insight-music",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_insights",
+      outcome: "ok",
+      input: {
+        type: "urn:entity:artist",
+        country: "United Kingdom",
+        era: { from: 1955, to: 1975 },
+        regionalTags: ["British"],
+      },
+      output: { count: 4 },
+      summary: "4 music candidates",
+    },
+    {
+      id: "insight-film",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_insights",
+      outcome: "ok",
+      input: {
+        type: "urn:entity:movie",
+        country: "United Kingdom",
+        era: { from: 1955, to: 1975 },
+        regionalTags: [],
+      },
+      output: { count: 2 },
+      summary: "2 film candidates",
+    },
+    {
+      id: "insight-tv-empty",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_insights",
+      outcome: "empty",
+      input: { type: "urn:entity:tv_show" },
+      output: { count: 0 },
+      summary: "0 TV candidates",
+    },
+    {
+      id: "plan-one",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "plan_session",
+      outcome: "ok",
+      output: { entityId: "music-pass-1", namedFavorite: false },
+      summary: "",
+    },
+    {
+      id: "plan-two",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "plan_session",
+      outcome: "ok",
+      output: { entityId: "music-pass-2", namedFavorite: false },
+      summary: "",
+    },
+    {
+      id: "plan-named",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "plan_session",
+      outcome: "ok",
+      output: { entityId: "named-favourite", namedFavorite: true },
+      summary: "",
+    },
+    {
+      id: "date-outside",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "era_verify",
+      outcome: "excluded",
+      output: {
+        entityId: "outside-years",
+        status: "verified_out_of_window",
+        favorite: false,
+      },
+      summary: "",
+    },
+    {
+      id: "date-outside-named",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "era_verify",
+      outcome: "excluded",
+      output: {
+        entityId: "named-outside-years",
+        status: "verified_out_of_window",
+        favorite: true,
+      },
+      summary: "",
+    },
+    {
+      id: "region-filter",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "safety_filter",
+      outcome: "excluded",
+      output: { entityId: "wrong-region", reason: "plausibility" },
+      summary: "",
+    },
+    {
+      id: "avoid-filter",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "safety_filter",
+      outcome: "excluded",
+      output: { entityId: "avoid-topic", blocked: { topic: "war" } },
+      summary: "",
+    },
+    {
+      id: "budget-filter",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_score",
+      outcome: "excluded",
+      output: { entityId: "budget", reason: "budget" },
+      summary: "",
+    },
+    {
+      id: "preference-filter",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_score",
+      outcome: "excluded",
+      output: { entityId: "preference", reason: "preference ranking" },
+      summary: "",
+    },
+    {
+      id: "dedupe-filter",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_score",
+      outcome: "excluded",
+      output: { entityId: "dedupe", reason: "dedupe" },
+      summary: "",
+    },
+    {
+      id: "capacity-filter",
+      createdAt: "2026-10-29T00:00:00.000Z",
+      tool: "qloo_score",
+      outcome: "excluded",
+      output: { entityId: "capacity", reason: "running-order capacity" },
+      summary: "",
+    },
+  ]
+  const summary = qlooAdded({ agentTrace: trace })
+  assert.deepEqual(summary.candidatesByDomain, [
+    { kind: "music", count: 4 },
+    { kind: "film", count: 2 },
+  ])
+  assert.equal(summary.passedChecks, 2)
+  assert.deepEqual(summary.heldBack, [
+    { reason: "outside_years", count: 1 },
+    { reason: "region", count: 1 },
+    { reason: "avoid_topic", count: 1 },
+    { reason: "other", count: 2 },
+  ])
+  assert.deepEqual(summary.filters, {
+    country: "United Kingdom",
+    years: "1955–1975",
+    regionalTag: "British",
+  })
+  assert.equal(summary.hasData, true)
+
+  const empty = qlooAdded({ agentTrace: [] })
+  assert.equal(empty.hasData, false)
+  assert.deepEqual(empty.candidatesByDomain, [])
+  assert.deepEqual(empty.heldBack, [])
+})
+
+test("named favourites never receive the From Qloo chip", () => {
+  assert.equal(planItemSource({ namedFavorite: true }), "named")
+  assert.equal(planItemSource({ namedFavorite: false }), "qloo")
+  assert.equal(planItemSource(undefined, true), "named")
+  assert.equal(planItemSource(undefined, false), undefined)
+
+  const plan = readFileSync("components/echoes/session-plan.tsx", "utf8")
+  assert.match(plan, /planItemSource\(item, Boolean\(manual\)\)/)
+  assert.match(plan, /"You named this" : "From Qloo"/)
+  const app = readFileSync("components/echoes/echoes-app.tsx", "utf8")
+  assert.match(app, /qloo=\{<QlooAdded kit=\{kit\} \/>\}/)
+  const tabs = readFileSync("components/echoes/kit-tabs.tsx", "utf8")
+  assert.match(tabs, /const tabs = \["overview", "tips", "qloo"\]/)
+})
+
 const historySession = (id, residentId, createdAt, reviewed = false) => ({
   id,
   createdAt,
@@ -2626,6 +2807,86 @@ test("dashboard numbering follows each resident's creation order", () => {
       ["margaret", 1],
     ]
   )
+})
+
+test("the review prompt appears only when the latest session is unreviewed", () => {
+  const unreviewed = [
+    historySession("dorothy-2", "dorothy", "2026-02-01T00:00:00.000Z"),
+    historySession(
+      "dorothy-1",
+      "dorothy",
+      "2026-01-01T00:00:00.000Z",
+      true
+    ),
+  ]
+  const pending = latestUnreviewedSession(unreviewed, "dorothy")
+  assert.equal(pending.number, 2)
+  assert.equal(pending.session.id, "dorothy-2")
+  assert.equal(latestUnreviewedSession([], "dorothy"), undefined)
+
+  const reviewedLatest = [
+    historySession(
+      "dorothy-3",
+      "dorothy",
+      "2026-03-01T00:00:00.000Z",
+      true
+    ),
+    historySession("dorothy-2", "dorothy", "2026-02-01T00:00:00.000Z"),
+  ]
+  assert.equal(latestUnreviewedSession(reviewedLatest, "dorothy"), undefined)
+})
+
+test("planning without review records the skipped session on the new kit", () => {
+  const nextKit = historySession(
+    "dorothy-3",
+    "dorothy",
+    "2026-03-01T00:00:00.000Z"
+  ).kit
+  const planned = markPlannedWithoutReview(nextKit, {
+    sessionId: "dorothy-2",
+    sessionNumber: 2,
+  })
+  assert.deepEqual(planned.plannedWithoutReview, {
+    sessionId: "dorothy-2",
+    sessionNumber: 2,
+  })
+  assert.equal(
+    planReviewNotice(planned),
+    "Planned without reviewing Session 2, so last time's responses are not reflected."
+  )
+})
+
+test("planning after review does not record a bypass flag", () => {
+  const sessions = [
+    historySession(
+      "dorothy-2",
+      "dorothy",
+      "2026-02-01T00:00:00.000Z",
+      true
+    ),
+  ]
+  const nextKit = historySession(
+    "dorothy-3",
+    "dorothy",
+    "2026-03-01T00:00:00.000Z"
+  ).kit
+  const pending = latestUnreviewedSession(sessions, "dorothy")
+  const planned = pending
+    ? markPlannedWithoutReview(nextKit, {
+        sessionId: pending.session.id,
+        sessionNumber: pending.number,
+      })
+    : nextKit
+  assert.equal(planned.plannedWithoutReview, undefined)
+  assert.equal(planReviewNotice(planned), undefined)
+
+  const app = readFileSync("components/echoes/echoes-app.tsx", "utf8")
+  assert.match(
+    app,
+    /latestUnreviewedSession\(workspace\.sessions, resident\.id\)/
+  )
+  assert.match(app, /markPlannedWithoutReview\(preparedKit, withoutReview\)/)
+  assert.match(app, /createKit\(intakePeople, planReviewBypass\)/)
 })
 
 test("planning a next session keeps every earlier kit", () => {

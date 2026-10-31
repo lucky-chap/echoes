@@ -228,6 +228,12 @@ export const sessionKitSchema = z.object({
       toolCalls: z.number(),
     })
     .optional(),
+  plannedWithoutReview: z
+    .object({
+      sessionId: z.string().max(64),
+      sessionNumber: z.number().int().min(1).max(600),
+    })
+    .optional(),
 })
 export const wrapUpSchema = z.object({
   recordedAt: z.string().datetime(),

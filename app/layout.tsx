@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Geist } from "next/font/google"
 import localFont from "next/font/local"
 import "./globals.css"
 
@@ -10,17 +11,14 @@ const sans = localFont({
   variable: "--font-body",
   display: "swap",
 })
-const serif = localFont({
-  src: [
-    { path: "./fonts/dm-serif.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/dm-serif-italic.ttf", weight: "400", style: "italic" },
-  ],
-  variable: "--font-heading",
-  display: "swap",
-})
 const handwritten = localFont({
   src: "./fonts/caveat.ttf",
   variable: "--font-hand",
+  display: "swap",
+})
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-heading",
   display: "swap",
 })
 export const metadata: Metadata = {
@@ -34,7 +32,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${sans.variable} ${serif.variable} ${handwritten.variable}`}
+      className={`${sans.variable} ${handwritten.variable} ${geist.variable}`}
     >
       <body>{children}</body>
     </html>

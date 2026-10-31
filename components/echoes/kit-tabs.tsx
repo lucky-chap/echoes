@@ -2,23 +2,34 @@
 
 import { useRef, useState, type ReactNode } from "react"
 
+const tabs = ["overview", "tips", "qloo"] as const
+type Tab = (typeof tabs)[number]
+
+const labels: Record<Tab, string> = {
+  overview: "Overview",
+  tips: "Tips",
+  qloo: "What Qloo added",
+}
+
 export default function KitTabs({
   overview,
   tips,
+  qloo,
 }: {
   overview: ReactNode
   tips: ReactNode
+  qloo: ReactNode
 }) {
-  const [active, setActive] = useState<"overview" | "tips">("overview")
-  const tabs = useRef<(HTMLButtonElement | null)[]>([])
+  const [active, setActive] = useState<Tab>("overview")
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   return (
     <div className="kit-tabs">
       <div className="kit-tab-list" role="tablist" aria-label="Session kit">
-        {(["overview", "tips"] as const).map((tab, index) => (
+        {tabs.map((tab, index) => (
           <button
             key={tab}
             ref={(element) => {
-              tabs.current[index] = element
+              tabRefs.current[index] = element
             }}
             type="button"
             role="tab"
@@ -34,12 +45,19 @@ export default function KitTabs({
                 return
               event.preventDefault()
               const next =
-                event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index
-              setActive(next === 0 ? "overview" : "tips")
-              tabs.current[next]?.focus()
+                event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? tabs.length - 1
+                    : (index +
+                        (event.key === "ArrowRight" ? 1 : -1) +
+                        tabs.length) %
+                      tabs.length
+              setActive(tabs[next])
+              tabRefs.current[next]?.focus()
             }}
           >
-            {tab === "overview" ? "Overview" : "Tips"}
+            {labels[tab]}
           </button>
         ))}
       </div>
@@ -60,6 +78,15 @@ export default function KitTabs({
         hidden={active !== "tips"}
       >
         {tips}
+      </div>
+      <div
+        id="kit-panel-qloo"
+        role="tabpanel"
+        aria-labelledby="kit-tab-qloo"
+        tabIndex={0}
+        hidden={active !== "qloo"}
+      >
+        {qloo}
       </div>
     </div>
   )

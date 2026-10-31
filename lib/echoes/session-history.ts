@@ -1,4 +1,4 @@
-import type { ResidentInput, SessionRecord } from "./types"
+import type { ResidentInput, SessionKit, SessionRecord } from "./types"
 
 export interface NumberedSession {
   session: SessionRecord
@@ -55,6 +55,35 @@ export function latestSessionFor(
   residentId: string
 ) {
   return residentSessions(sessions, residentId)[0]?.session
+}
+
+/** The prompt is only shown when the newest session for this resident is unreviewed. */
+export function latestUnreviewedSession(
+  sessions: SessionRecord[],
+  residentId: string
+): NumberedSession | undefined {
+  const latest = residentSessions(sessions, residentId)[0]
+  return latest && !latest.session.wrapUp ? latest : undefined
+}
+
+export function markPlannedWithoutReview(
+  kit: SessionKit,
+  previous: { sessionId: string; sessionNumber: number }
+): SessionKit {
+  return {
+    ...kit,
+    plannedWithoutReview: {
+      sessionId: previous.sessionId,
+      sessionNumber: previous.sessionNumber,
+    },
+  }
+}
+
+export function planReviewNotice(kit: SessionKit) {
+  const previous = kit.plannedWithoutReview
+  return previous
+    ? `Planned without reviewing Session ${previous.sessionNumber}, so last time's responses are not reflected.`
+    : undefined
 }
 
 /** A new kit is always prepended; earlier kits are never replaced. */

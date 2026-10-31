@@ -12,6 +12,8 @@ import { mergeFeedback } from "@/lib/echoes/feedback"
 import { intakeResidents, type IntakeMode } from "@/lib/echoes/intake"
 import {
   latestSessionFor,
+  latestUnreviewedSession,
+  markPlannedWithoutReview,
   recordNewSession,
   residentSessionGroups,
   sessionNumber,
@@ -20,10 +22,12 @@ import type {
   FeedbackRecord,
   ResidentInput,
   SessionKit,
+  SessionRecord,
 } from "@/lib/echoes/types"
 import { browserWorkspaceStorage } from "@/lib/echoes/browser-storage"
 import LiveSession from "./live-session"
 import SessionPlan from "./session-plan"
+import QlooAdded from "./qloo-added"
 import KitTabs from "./kit-tabs"
 import KitChecks from "./kit-checks"
 import SessionReview from "./session-review"
@@ -93,6 +97,16 @@ export default function EchoesApp() {
   const [residentSearch, setResidentSearch] = useState("")
   const [intakeMode, setIntakeMode] = useState<IntakeMode>("plan")
   const [draftResident, setDraftResident] = useState<ResidentInput | null>(null)
+  const [planReviewPrompt, setPlanReviewPrompt] = useState<{
+    resident: ResidentInput
+    session: SessionRecord
+    number: number
+  } | null>(null)
+  const [planReviewBypass, setPlanReviewBypass] = useState<{
+    residentId: string
+    sessionId: string
+    sessionNumber: number
+  } | null>(null)
   const requestController = useRef<AbortController | null>(null)
   const residents = [
     workspace.residents.find((r) => r.id === activeResidentId) ??
@@ -133,6 +147,8 @@ export default function EchoesApp() {
         setResidentSearch("")
         setActiveResidentId("")
         setDeleteOpen(false)
+        setPlanReviewPrompt(null)
+        setPlanReviewBypass(null)
       })
     }
   }, [locked])
@@ -188,7 +204,9 @@ export default function EchoesApp() {
     }))
   const update = (index: number, patch: Partial<ResidentInput>) => {
     if (intakeMode === "add") {
-      setDraftResident((current) => (current ? { ...current, ...patch } : current))
+      setDraftResident((current) =>
+        current ? { ...current, ...patch } : current
+      )
       return
     }
     setResidents((current) =>
@@ -200,6 +218,8 @@ export default function EchoesApp() {
     )
   }
   const loadDemo = (all = false) => {
+    setPlanReviewPrompt(null)
+    setPlanReviewBypass(null)
     if (!all) {
       const example = demoProfiles[0]
       const existing = workspace.residents.find(
@@ -239,13 +259,49 @@ export default function EchoesApp() {
     setDraftResident(null)
     navigate("intake")
   }
-  const planNextSession = (resident: ResidentInput) => {
+  const beginPlanNextSession = (resident: ResidentInput) => {
     setActiveResidentId(resident.id)
     setIntakeMode("plan")
     setDraftResident(null)
     navigate("intake")
   }
+  const planNextSession = (resident: ResidentInput) => {
+    const latest = latestUnreviewedSession(workspace.sessions, resident.id)
+    if (latest) {
+      setPlanReviewBypass(null)
+      setPlanReviewPrompt({
+        resident,
+        session: latest.session,
+        number: latest.number,
+      })
+      return
+    }
+    setPlanReviewPrompt(null)
+    setPlanReviewBypass(null)
+    beginPlanNextSession(resident)
+  }
+  const reviewLatestSession = () => {
+    if (!planReviewPrompt) return
+    const { resident, session } = planReviewPrompt
+    setPlanReviewPrompt(null)
+    setPlanReviewBypass(null)
+    setActiveResidentId(resident.id)
+    setKit(session.kit)
+    navigate("review", session.id)
+  }
+  const planWithoutReview = () => {
+    if (!planReviewPrompt) return
+    setPlanReviewBypass({
+      residentId: planReviewPrompt.resident.id,
+      sessionId: planReviewPrompt.session.id,
+      sessionNumber: planReviewPrompt.number,
+    })
+    setPlanReviewPrompt(null)
+    beginPlanNextSession(planReviewPrompt.resident)
+  }
   const editResidentProfile = (resident: ResidentInput) => {
+    setPlanReviewPrompt(null)
+    setPlanReviewBypass(null)
     setActiveResidentId(resident.id)
     setIntakeMode("profile")
     setDraftResident(null)
@@ -253,6 +309,8 @@ export default function EchoesApp() {
   }
   const addNewPerson = () => {
     if (workspace.residents.length >= 60) return
+    setPlanReviewPrompt(null)
+    setPlanReviewBypass(null)
     setDraftResident(blankResident())
     setIntakeMode("add")
     setResidentSearch("")
@@ -269,7 +327,14 @@ export default function EchoesApp() {
     setIntakeMode("plan")
     navigate("dashboard")
   }
-  const createKit = async (chosenResidents = residents) => {
+  const createKit = async (
+    chosenResidents = residents,
+    withoutReview: {
+      residentId: string
+      sessionId: string
+      sessionNumber: number
+    } | null = null
+  ) => {
     requestController.current = new AbortController()
     setLoading(true)
     setError("")
@@ -301,18 +366,23 @@ export default function EchoesApp() {
       const payload = await response.json()
       if (!response.ok)
         throw Error(payload.error || "Could not prepare a session kit.")
-      setKit(payload.kit)
+      const preparedKit = payload.kit as SessionKit
+      const nextKit =
+        withoutReview && withoutReview.residentId === normalizedResidents[0].id
+          ? markPlannedWithoutReview(preparedKit, withoutReview)
+          : preparedKit
+      setKit(nextKit)
       const session = {
-        id: payload.kit.id,
-        createdAt: payload.kit.createdAt,
-        kit: payload.kit,
+        id: nextKit.id,
+        createdAt: nextKit.createdAt,
+        kit: nextKit,
         feedback: [],
         engagement: null,
         noteDraft: null,
-        progress: payload.kit.activities?.[0]
+        progress: nextKit.activities?.[0]
           ? {
-              activityId: payload.kit.activities[0].id,
-              updatedAt: payload.kit.createdAt,
+              activityId: nextKit.activities[0].id,
+              updatedAt: nextKit.createdAt,
             }
           : undefined,
       }
@@ -320,22 +390,23 @@ export default function EchoesApp() {
         ...current,
         memories: [
           ...confirmProfile(normalizedResidents[0], current.memories ?? []),
-          ...payload.kit.items.map((item: SessionKit["items"][number]) => ({
+          ...nextKit.items.map((item: SessionKit["items"][number]) => ({
             id: crypto.randomUUID(),
             residentId: normalizedResidents[0].id,
             kind: "discovery" as const,
             status: "suggested" as const,
             text: `${item.name}: Qloo suggestion, not a personal memory. ${item.yearEvidence.source}, ${item.yearEvidence.year}.`,
             source: "Qloo" as const,
-            createdAt: payload.kit.createdAt,
+            createdAt: nextKit.createdAt,
             entityId: item.entityId,
-            sessionId: payload.kit.id,
+            sessionId: nextKit.id,
           })),
         ],
-        traces: [...payload.kit.agentTrace, ...current.traces].slice(0, 200),
+        traces: [...nextKit.agentTrace, ...current.traces].slice(0, 200),
         sessions: recordNewSession(current.sessions, session),
       }))
-      navigate("kit", payload.kit.id)
+      setPlanReviewBypass(null)
+      navigate("kit", nextKit.id)
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -496,14 +567,15 @@ export default function EchoesApp() {
       <header className="site-header">
         <nav className="nav-left" aria-label="Main navigation">
           <Link
-            className={screen === "home" ? "nav-link current" : "nav-link"}
+            className="wordmark"
             href="/"
+            aria-label="Echoes home"
             onNavigate={(event) => {
               event.preventDefault()
               navigate("home")
             }}
           >
-            Discover
+            echoes<span aria-hidden="true">✳</span>
           </Link>
           <Link
             className={screen !== "home" ? "nav-link current" : "nav-link"}
@@ -516,42 +588,33 @@ export default function EchoesApp() {
             Your workspace
           </Link>
         </nav>
-        <Link
-          className="wordmark"
-          href="/"
-          aria-label="Echoes home"
-          onNavigate={(event) => {
-            event.preventDefault()
-            navigate("home")
-          }}
+
+        <nav
+          className="nav-right flex flex-row justify-end"
+          aria-label="Resources"
         >
-          echoes<span aria-hidden="true">✳</span>
-        </Link>
-        <nav className="nav-right" aria-label="Resources">
-          <Link className="nav-link" href="/eval">
+          {/* <Link className="nav-link" href="/eval">
             Our evidence
-          </Link>
+          </Link> */}
           <Link
             className="header-cta"
-            href="/dashboard"
-            onNavigate={(event) => {
-              event.preventDefault()
-              begin()
-            }}
+            href="https://github.com/lucky-chap/echoes"
+            target="_blank"
+            rel="noopener noreferrer"
           >
-            Let’s begin <ArrowUpRight />
+            <ArrowUpRight /> GitHub
           </Link>
         </nav>
       </header>
       <main id="main">
-        {mode === "demo" && !locked && (
+        {/* {mode === "demo" && !locked && (
           <p className="hint" role="status">
             {saveState}
           </p>
-        )}
+        )} */}
         {mode === "protected" && !locked && (
           <div className="workspace-protection">
-            <span role="status">{saveState}</span>
+            {/* <span role="status">{saveState}</span> */}
             <button
               className="secondary"
               disabled={saveState === "Saving changes…"}
@@ -606,10 +669,10 @@ export default function EchoesApp() {
                     a good place to start <span aria-hidden="true">⤴</span>
                   </span>
                 </div>
-                <p className="hero-meta">
-                  <Clock3 size={13} /> One person, one thoughtful session{" "}
-                  <span>·</span> Led by you, at their pace
-                </p>
+                {/* <p className="hero-meta">
+                  One person, one thoughtful session <span>·</span> Led by you,
+                  at their pace
+                </p> */}
               </div>
             </section>
             <section className="introducing" aria-labelledby="intro-title">
@@ -856,15 +919,42 @@ export default function EchoesApp() {
                   ))}
                 </div>
               ) : (
-                <div className="dashboard-empty">
-                  <h3>Your first kit starts with a few familiar details.</h3>
-                  <p>
-                    Add a person, a birth year, and a favourite to create a
-                    calm, reviewable plan.
-                  </p>
-                  <button className="secondary" onClick={addNewPerson}>
-                    Add a new person <ArrowRight size={16} />
-                  </button>
+                <div className="dashboard-start-cards">
+                  <article className="dashboard-start-card">
+                    <p className="eyebrow">THE FIRST STEP</p>
+                    <h3>Create a new person</h3>
+                    <p>
+                      Add a nickname, birth year, and a favourite to begin a
+                      calm, reviewable plan.
+                    </p>
+                    <button className="primary" onClick={addNewPerson}>
+                      Add a new person <ArrowRight size={16} />
+                    </button>
+                  </article>
+                  <article className="dashboard-start-card">
+                    <p className="eyebrow">JUST EXPLORING</p>
+                    <h3>Try a single demo person</h3>
+                    <p>
+                      Start with one fictional resident and a familiar thread.
+                    </p>
+                    <button className="secondary" onClick={() => loadDemo()}>
+                      Try one demo person <ArrowRight size={15} />
+                    </button>
+                  </article>
+                  <article className="dashboard-start-card">
+                    <p className="eyebrow">JUST EXPLORING</p>
+                    <h3>Add three fictional profiles</h3>
+                    <p>
+                      Load three fictional residents to see how Echoes plans for
+                      more than one life.
+                    </p>
+                    <button
+                      className="secondary"
+                      onClick={() => loadDemo(true)}
+                    >
+                      Add three fictional profiles <Users size={15} />
+                    </button>
+                  </article>
                 </div>
               )}
             </section>
@@ -908,6 +998,7 @@ export default function EchoesApp() {
                           setActiveResidentId(r.id)
                           setDraftResident(null)
                           setKit(null)
+                          setPlanReviewBypass(null)
                         }}
                       >
                         {r.nickname || "New resident"}
@@ -932,9 +1023,6 @@ export default function EchoesApp() {
                         ? "EDIT PROFILE"
                         : "PLAN NEXT SESSION"}
                   </p>
-                  <span className="step-label">
-                    01 <span>/ 03</span>
-                  </span>
                 </div>
                 <h1 id="intake-title">
                   {intakeMode === "add"
@@ -959,7 +1047,7 @@ export default function EchoesApp() {
                       navigate("dashboard")
                       return
                     }
-                    void createKit(intakePeople)
+                    void createKit(intakePeople, planReviewBypass)
                   }}
                 >
                   {intakePeople.map((resident, index) => (
@@ -1096,13 +1184,13 @@ export default function EchoesApp() {
                           placeholder="What they loved, family, work, how they like sessions to feel, practical things like where to sit"
                         />
                       </label>
-                      <PreferencesEditor
+                      {/* <PreferencesEditor
                         resident={resident}
                         onChange={(patch) => update(index, patch)}
                         onExtract={extractNote}
                         extracting={extracting}
                         demo={mode === "demo"}
-                      />
+                      /> */}
                       <label className="wide check-label">
                         <input
                           type="checkbox"
@@ -1221,9 +1309,7 @@ export default function EchoesApp() {
                     <p className="eyebrow">YOUR RECENT KITS</p>
                     {workspace.sessions
                       .filter((s) =>
-                        s.kit.residents.some(
-                          (r) => r.id === intakePerson?.id
-                        )
+                        s.kit.residents.some((r) => r.id === intakePerson?.id)
                       )
                       .slice(0, 5)
                       .map((session) => (
@@ -1426,12 +1512,10 @@ export default function EchoesApp() {
                           (r) => r.id === kit.residents[0]?.id
                         )}
                         feedback={feedback.filter(
-                          (record) =>
-                            record.residentId === kit.residents[0]?.id
+                          (record) => record.residentId === kit.residents[0]?.id
                         )}
                         memories={(workspace.memories ?? []).filter(
-                          (record) =>
-                            record.residentId === kit.residents[0]?.id
+                          (record) => record.residentId === kit.residents[0]?.id
                         )}
                         onChange={(next) => {
                           setKit(next)
@@ -1623,7 +1707,10 @@ export default function EchoesApp() {
                           {(
                             [
                               ["Session pace", kitPreferences.format_prefs],
-                              ["Practical details", kitPreferences.logistics.map(logisticsSentence)],
+                              [
+                                "Practical details",
+                                kitPreferences.logistics.map(logisticsSentence),
+                              ],
                               ["People mentioned", kitPreferences.people],
                               ["Places", kitPreferences.places],
                             ] as const
@@ -1678,6 +1765,7 @@ export default function EchoesApp() {
                   </section>
                 </aside>
               }
+              qloo={<QlooAdded kit={kit} />}
             />
           </section>
         )}
@@ -1707,13 +1795,56 @@ export default function EchoesApp() {
           </button>
         )}
       </footer>
+      {planReviewPrompt && screen === "dashboard" && (
+        <div
+          className="dialog-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setPlanReviewPrompt(null)
+              setPlanReviewBypass(null)
+            }
+          }}
+        >
+          <section
+            className="plan-review-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-review-title"
+            aria-describedby="plan-review-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="plan-review-title">Before you plan next time</h2>
+            <p id="plan-review-description">
+              {`Session ${planReviewPrompt.number} hasn't been reviewed. A couple of minutes of notes will shape this plan.`}
+            </p>
+            <div>
+              <button
+                className="secondary"
+                autoFocus
+                onClick={reviewLatestSession}
+              >
+                Review Session {planReviewPrompt.number}
+              </button>
+              <button className="primary" onClick={planWithoutReview}>
+                Plan without review
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {deleteOpen && (
-        <div className="dialog-backdrop">
+        <div
+          className="dialog-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setDeleteOpen(false)
+          }}
+        >
           <section
             className="delete-dialog"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-title"
+            onClick={(event) => event.stopPropagation()}
           >
             <h2 id="delete-title">Clear your workspace?</h2>
             <p>
