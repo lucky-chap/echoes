@@ -38,8 +38,6 @@ pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/.worldlings/
+/.echoes/
 /.echoes-data/
 !.env.example
-/tests/
-/scripts/

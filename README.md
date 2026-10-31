@@ -234,9 +234,15 @@ npm run lint
 npm run build
 # Fallback if Turbopack's local worker is blocked by the environment:
 npx next build --webpack
+
+npm run qloo:smoke
+npm run warm-demo
+npm run check-demo-offline
 ```
 
 Unit/integration tests use explicit fixtures for repeatable coverage of the loop, provenance, year gates, bounded replanning, memory, encryption, link lifecycle, and unsafe URLs. They are not labelled live API tests. The default test suite does not require provider credentials or network access.
+
+The commands under `scripts/` — Qloo smoke, warm-up, and the offline demo check — support the verification flow above; browser checks live in `tests/` and are excluded from `npm test` because they need Playwright/Chromium.
 
 An isolated browser test is supplied in `tests/echoes-copilot-browser.cjs`. It is not part of `npm test` because it requires Playwright/Chromium and permission to launch a local server/browser. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can point at existing installations. It uses temporary encrypted storage and an intercepted, explicitly labelled discovery fixture. It checks tablet/mobile layouts, approval/editing, wrap-up persistence, next-session memory payloads, access controls, family submission/review, and stale-save rejection.
 
@@ -260,4 +266,4 @@ An isolated browser test is supplied in `tests/echoes-copilot-browser.cjs`. It i
 
 ## License and credits
 
-[MIT](LICENSE). Data and services from Qloo, MusicBrainz, TMDB, and Groq. This product uses the TMDB API but is not endorsed or certified by TMDB.
+[MIT License](LICENSE). Data and services from Qloo, MusicBrainz, TMDB, and Groq. This product uses the TMDB API but is not endorsed or certified by TMDB.
